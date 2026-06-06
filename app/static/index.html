@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Resonance Graph</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">local media intelligence</p>
+          <h1>Resonance Graph</h1>
+        </div>
+        <button id="refreshStatus" class="icon-button" title="Refresh status">↻</button>
+      </header>
+
+      <section class="status-strip" id="statusStrip"></section>
+
+      <section class="workspace">
+        <aside class="panel controls">
+          <nav class="tabs" aria-label="Workflow tabs">
+            <button class="tab active" data-tab="ingest">Ingest</button>
+            <button class="tab" data-tab="ask">Ask</button>
+            <button class="tab" data-tab="library">Library</button>
+            <button class="tab" data-tab="admin">Admin</button>
+          </nav>
+
+          <div class="tab-panel active" id="tab-ingest">
+            <div class="form-block">
+              <label for="videoUrl">Video URL</label>
+              <input id="videoUrl" placeholder="https://www.youtube.com/watch?v=..." />
+              <label class="check-row">
+                <input id="videoForce" type="checkbox" />
+                <span>Force rebuild caches</span>
+              </label>
+              <button id="ingestVideo">Ingest video</button>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="form-block">
+              <label for="channelUrl">Channel URL</label>
+              <input id="channelUrl" placeholder="https://www.youtube.com/@channel/videos" />
+              <div class="split">
+                <label>
+                  Limit
+                  <input id="channelLimit" type="number" min="0" placeholder="0 = all" />
+                </label>
+                <label>
+                  Min seconds
+                  <input id="channelMinDuration" type="number" min="1" placeholder="61" />
+                </label>
+              </div>
+              <label class="check-row">
+                <input id="channelForce" type="checkbox" />
+                <span>Force rebuild caches</span>
+              </label>
+              <div class="button-row">
+                <button id="previewChannel" class="secondary">Preview</button>
+                <button id="ingestChannel">Ingest channel</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="tab-ask">
+            <div class="form-block">
+              <label for="question">Question</label>
+              <textarea id="question" rows="5" placeholder="What does the transcript say about..."></textarea>
+              <div class="split">
+                <label>
+                  Top K
+                  <input id="topK" type="number" min="1" value="5" />
+                </label>
+                <label>
+                  Neighbors
+                  <input id="neighbors" type="number" min="0" value="0" />
+                </label>
+              </div>
+              <button id="askButton">Ask</button>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="tab-library">
+            <div class="button-row">
+              <button id="refreshEpisodes" class="secondary">Refresh</button>
+              <button id="refreshGraph" class="secondary">Graph</button>
+            </div>
+            <div id="episodeList" class="episode-list"></div>
+          </div>
+
+          <div class="tab-panel" id="tab-admin">
+            <div class="form-block">
+              <button id="setupDb">Setup database</button>
+              <button id="resetDb" class="danger">Reset graph data</button>
+              <button id="clearFiles" class="danger secondary">Clear local files</button>
+              <label class="check-row">
+                <input id="includeModels" type="checkbox" />
+                <span>Also clear transcription models</span>
+              </label>
+            </div>
+          </div>
+        </aside>
+
+        <section class="main-grid">
+          <section class="panel graph-panel">
+            <div class="panel-title">
+              <h2>Neo4j Graph</h2>
+              <div class="graph-tools">
+                <select id="graphEpisode"></select>
+                <input id="graphLimit" type="number" min="1" max="1000" value="250" />
+              </div>
+            </div>
+            <svg id="graphSvg" role="img" aria-label="Neo4j graph visualization"></svg>
+          </section>
+
+          <section class="panel output-panel">
+            <div class="panel-title">
+              <h2>Output</h2>
+              <button id="clearOutput" class="icon-button" title="Clear output">×</button>
+            </div>
+            <pre id="output"></pre>
+          </section>
+        </section>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
