@@ -1,0 +1,20 @@
+name: Example Public Benchmark
+description: >
+  Template benchmark suite. Replace these cases with questions for videos you are
+  legally allowed to process and publish metrics for.
+cases:
+  - id: example-supported-question
+    question: "What is the main topic discussed in the video?"
+    expected_video_id: "VIDEO_ID"
+    expected_terms:
+      - "main topic"
+    relevant_time_ranges:
+      - video_id: "VIDEO_ID"
+        start_time: 0
+        end_time: 120
+
+  - id: example-insufficient-evidence
+    question: "What does the video say about a topic that never appears?"
+    expected_video_id: "VIDEO_ID"
+    expect_insufficient_evidence: true
+    expected_terms: []

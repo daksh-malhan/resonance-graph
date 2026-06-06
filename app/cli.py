@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from app.benchmark import load_benchmark_suite, run_benchmark, write_report
 from app.config import AppConfig, load_config
 from app.errors import AppError
 from app.neo4j_store import Neo4jStore
@@ -228,6 +230,67 @@ def retrieve(
         finally:
             store.close()
         typer.echo(format_retrieval_context(chunks))
+    except Exception as exc:
+        _fail(exc)
+
+
+@cli_app.command("benchmark")
+def benchmark(
+    suite_path: Annotated[
+        Path,
+        typer.Argument(help="YAML or JSON benchmark suite with questions and expected evidence."),
+    ],
+    output_dir: Annotated[
+        Path,
+        typer.Option("--output-dir", help="Directory for benchmark.json and benchmark.md."),
+    ] = Path("benchmark-results/latest"),
+    top_k: Annotated[int | None, typer.Option("--top-k", help="Number of chunks to retrieve.")] = None,
+    neighbors: Annotated[
+        int,
+        typer.Option("--neighbors", help="Include N adjacent chunks around each retrieved chunk."),
+    ] = 0,
+    include_answers: Annotated[
+        bool,
+        typer.Option(
+            "--answers/--retrieval-only",
+            help="Generate answers and score answer-level signals. Retrieval-only is faster.",
+        ),
+    ] = True,
+    include_answer_text: Annotated[
+        bool,
+        typer.Option(
+            "--include-answer-text",
+            help="Write raw generated answers into benchmark.json. Avoid for private data.",
+        ),
+    ] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed logs.")] = False,
+) -> None:
+    """Run an accuracy and latency benchmark over ingested transcript data."""
+    try:
+        config = _config(verbose)
+        suite = load_benchmark_suite(suite_path)
+        ollama = OllamaClient(config)
+        ollama.ensure_models()
+        store = Neo4jStore(config)
+        try:
+            report = run_benchmark(
+                suite,
+                store,
+                ollama,
+                config,
+                top_k=top_k,
+                neighbor_window=neighbors,
+                include_answers=include_answers,
+                include_answer_text=include_answer_text,
+            )
+        finally:
+            store.close()
+        json_path, markdown_path = write_report(report, output_dir)
+        typer.echo(f"Benchmark complete: {suite.name}")
+        for key, value in report.metrics.items():
+            typer.echo(f"{key}: {value}")
+        typer.echo(f"JSON: {json_path}")
+        typer.echo(f"Markdown: {markdown_path}")
     except Exception as exc:
         _fail(exc)
 

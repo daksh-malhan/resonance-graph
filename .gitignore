@@ -24,6 +24,7 @@ coverage.xml
 *.log
 *.tmp
 tmp/
+benchmark-results/
 
 # Neo4j local volumes if mounted directly
 neo4j_data/

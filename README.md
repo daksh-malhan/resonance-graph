@@ -25,6 +25,7 @@ This project does not support bypassing DRM, paywalls, private videos, login-onl
 - Local RAG answers with timestamp citations.
 - Minimal local web app for ingestion, search, graph visualization, and admin actions.
 - CLI for repeatable workflows.
+- Benchmark harness for retrieval, answer, citation, and latency metrics.
 - Offline unit tests for config, chunking, models, prompts, retrieval formatting, and YouTube metadata parsing.
 
 ## What It Does Not Do Yet
@@ -43,6 +44,7 @@ This project does not support bypassing DRM, paywalls, private videos, login-onl
 ## Architecture
 
 For a deeper implementation map, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For benchmarking and accuracy testing, see [docs/BENCHMARKING.md](docs/BENCHMARKING.md).
 
 ```mermaid
 flowchart LR
@@ -298,6 +300,18 @@ Show retrieved context with the answer:
 
 ```bash
 resonance ask "What is this video about?" --show-context
+```
+
+Run a benchmark suite:
+
+```bash
+resonance benchmark evals/my-safe-benchmark.yaml --output-dir benchmark-results/latest
+```
+
+Run retrieval-only benchmark mode:
+
+```bash
+resonance benchmark evals/my-safe-benchmark.yaml --retrieval-only
 ```
 
 List episodes:
