@@ -27,6 +27,12 @@ def parse_youtube_metadata(info: dict[str, Any], episode_dir: Path) -> EpisodeMe
         video_id=video_id,
         title=info.get("title") or video_id,
         channel=info.get("channel") or info.get("uploader"),
+        channel_id=info.get("channel_id"),
+        channel_url=info.get("channel_url"),
+        uploader=info.get("uploader"),
+        uploader_id=info.get("uploader_id"),
+        uploader_url=info.get("uploader_url"),
+        creator=info.get("creator"),
         source_url=info.get("webpage_url") or info.get("original_url") or "",
         duration=info.get("duration"),
         upload_date=info.get("upload_date"),
@@ -148,6 +154,35 @@ def load_download_result(video_id: str, config: AppConfig) -> DownloadResult:
             f"No cached download metadata found for {video_id}. Ingest the video first."
         )
     return DownloadResult.model_validate_json(metadata_path.read_text())
+
+
+def refresh_cached_youtube_metadata(config: AppConfig) -> list[DownloadResult]:
+    """Rebuild cached metadata.json files from yt-dlp info JSON without redownloading media."""
+    config.ensure_directories()
+    refreshed: list[DownloadResult] = []
+    if not config.youtube_download_dir.exists():
+        return refreshed
+
+    for episode_dir in sorted(path for path in config.youtube_download_dir.iterdir() if path.is_dir()):
+        info_paths = sorted(episode_dir.glob("*.info.json"))
+        if not info_paths:
+            continue
+        info = read_json(info_paths[0])
+        episode = parse_youtube_metadata(info, episode_dir)
+        if not episode.source_url:
+            continue
+
+        metadata_path = episode_dir / "metadata.json"
+        if metadata_path.exists():
+            existing = DownloadResult.model_validate_json(metadata_path.read_text())
+            source = existing.source
+        else:
+            source = SourceMetadata(id=episode.source_url, url=episode.source_url)
+
+        result = DownloadResult(source=source, episode=episode, episode_dir=episode_dir)
+        write_json(metadata_path, result)
+        refreshed.append(result)
+    return refreshed
 
 
 def discover_channel_videos(

@@ -8,6 +8,8 @@ def test_retrieval_context_includes_citations() -> None:
         video_id="vid",
         episode_title="Example Episode",
         episode_channel="Example Channel",
+        episode_uploader="Example Uploader",
+        episode_creator="Example Creator",
         source_url="https://www.youtube.com/watch?v=vid",
         text="The host explains local embeddings.",
         start_time=65,
@@ -21,8 +23,9 @@ def test_retrieval_context_includes_citations() -> None:
     assert "Example Channel" in context
     assert "<episode_context>" in context
     assert "Episode title: Example Episode" in context
-    assert "Episode channel/owner: Example Channel" in context
-    assert "Channel owner/publisher and possible host/show context: Example Channel" in context
+    assert "YouTube channel: Example Channel" in context
+    assert "YouTube uploader: Example Uploader" in context
+    assert "YouTube creator: Example Creator" in context
     assert "01:05-01:35" in context
     assert "<transcript_source>local_whisper</transcript_source>" in context
     assert "The host explains local embeddings." in context
@@ -46,6 +49,7 @@ def test_prompt_allows_title_context_without_treating_it_as_transcript_evidence(
                 video_id="vid",
                 episode_title="Dr. Jane Smith on Memory and Learning",
                 episode_channel="People by WTF",
+                episode_uploader="Nikhil Kamath",
                 source_url="https://www.youtube.com/watch?v=vid",
                 text="Today we discuss how memory consolidation works.",
                 start_time=10,
@@ -58,7 +62,7 @@ def test_prompt_allows_title_context_without_treating_it_as_transcript_evidence(
 
     assert "Dr. Jane Smith on Memory and Learning" in prompt
     assert "People by WTF" in prompt
+    assert "Nikhil Kamath" in prompt
     assert "Episode title: Dr. Jane Smith on Memory and Learning" in prompt
-    assert "video title, channel/uploader name, or host/show metadata hint" in prompt
-    assert "Channel owner/publisher and possible host/show context: People by WTF" in prompt
-    assert "host_hint_citation" in prompt
+    assert "YouTube channel/uploader/creator metadata" in prompt
+    assert "YouTube uploader: Nikhil Kamath" in prompt

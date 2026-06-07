@@ -109,12 +109,16 @@ class MetadataStore:
                 "title": "Martin Escobari: Trauma, Chaos & Three Industries Worth $100B | Nikhil Kamath | People by WTF",
                 "video_id": "one",
                 "channel": "Nikhil Kamath",
+                "uploader": "Nikhil Kamath",
+                "uploader_id": "@nikhil.kamath",
                 "chunk_count": 114,
             },
             {
                 "title": "The World Bank President On Why Jobs Fix Everything | Ajay Banga x Nikhil Kamath | People by WTF",
                 "video_id": "two",
                 "channel": "Nikhil Kamath",
+                "uploader": "Nikhil Kamath",
+                "uploader_id": "@nikhil.kamath",
                 "chunk_count": 109,
             },
         ]
@@ -124,6 +128,8 @@ class MetadataStore:
             "title": "Martin Escobari: Trauma, Chaos & Three Industries Worth $100B | Nikhil Kamath | People by WTF",
             "video_id": video_id,
             "channel": "Nikhil Kamath",
+            "uploader": "Nikhil Kamath",
+            "uploader_id": "@nikhil.kamath",
             "chunk_count": 114,
         }
 
@@ -138,8 +144,8 @@ def test_metadata_identity_question_uses_channel_without_llm() -> None:
 
     assert "Nikhil Kamath" in result.answer
     assert "channel owner or publisher" in result.answer
-    assert "host/show hint" in result.answer
-    assert "Episode channel/owner: Nikhil Kamath" in result.answer
+    assert "YouTube uploader: Nikhil Kamath" in result.answer
+    assert "YouTube channel: Nikhil Kamath" in result.answer
     assert result.contexts == []
 
 

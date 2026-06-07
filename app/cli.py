@@ -17,7 +17,7 @@ from app.prompts import format_retrieval_context
 from app.retrieval import answer_question, retrieve_context
 from app.transcription import local_transcription_backend_status
 from app.utils import configure_logging, format_timestamp, require_executable
-from app.youtube import discover_channel_videos
+from app.youtube import discover_channel_videos, refresh_cached_youtube_metadata
 
 LEGAL_BOUNDARY = (
     "Only ingest videos that you own, have permission to process, are Creative Commons/"
@@ -385,6 +385,28 @@ def inspect_episode(
             return
         for key, value in episode.items():
             typer.echo(f"{key}: {value}")
+    except Exception as exc:
+        _fail(exc)
+
+
+@cli_app.command("refresh-metadata")
+def refresh_metadata(
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed logs.")] = False,
+) -> None:
+    """Refresh cached YouTube metadata fields in Neo4j without re-ingesting transcripts."""
+    try:
+        config = _config(verbose)
+        downloads = refresh_cached_youtube_metadata(config)
+        if not downloads:
+            typer.echo("No cached YouTube info JSON files found.")
+            return
+        store = Neo4jStore(config)
+        try:
+            for download in downloads:
+                store.upsert_episode_metadata(download)
+        finally:
+            store.close()
+        typer.echo(f"Refreshed metadata for {len(downloads)} cached video(s).")
     except Exception as exc:
         _fail(exc)
 

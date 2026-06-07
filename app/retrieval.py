@@ -109,40 +109,33 @@ def build_metadata_identity_answer(episodes: list[dict]) -> str:
     if not episodes:
         return "I do not have stored episode metadata for that selection."
 
-    channels = sorted(
-        {
-            str(episode.get("channel")).strip()
-            for episode in episodes
-            if episode.get("channel") and str(episode.get("channel")).strip()
-        }
-    )
+    owners = sorted({_youtube_owner_name(episode) for episode in episodes if _youtube_owner_name(episode)})
     titles = [str(episode.get("title") or episode.get("video_id")) for episode in episodes]
 
-    if not channels:
+    if not owners:
         return (
-            "The stored metadata does not include a channel/uploader name for that selection. "
-            "I cannot identify the channel owner or host from metadata alone."
+            "The stored YouTube metadata does not include channel, uploader, or creator fields "
+            "for that selection. I cannot identify the channel owner or publisher from metadata alone."
         )
 
     lines: list[str] = []
-    if len(channels) == 1:
-        channel = channels[0]
-        lines.append(
-            f"The stored channel/uploader metadata identifies `{channel}` as the channel owner or publisher. "
-            f"This is also the best available host/show hint from metadata, but it should be treated as metadata inference unless the transcript or title directly confirms the host. "
-            f"(Episode channel/owner: {channel})"
-        )
+    if len(owners) == 1:
+        owner = owners[0]
+        citations = _youtube_owner_citations(episodes[0])
+        lines.append(f"The stored YouTube metadata identifies `{owner}` as the channel owner or publisher.")
+        if citations:
+            lines.append("Metadata source: " + "; ".join(citations))
     else:
         lines.append(
-            "The selected data has multiple channel/uploader metadata values: "
-            + ", ".join(f"`{channel}`" for channel in channels)
-            + ". Treat these as channel owner/publisher metadata, not transcript proof."
+            "The selected data has multiple YouTube channel/uploader metadata values: "
+            + ", ".join(f"`{owner}`" for owner in owners)
+            + ". Treat these as YouTube metadata, not transcript proof."
         )
 
-    title_host_hints = [title for title in titles if any(channel in title for channel in channels)]
+    title_host_hints = [title for title in titles if any(owner in title for owner in owners)]
     if title_host_hints:
         lines.append("")
-        lines.append("Title metadata also supports this host/show context:")
+        lines.append("Title metadata also mentions the same owner/publisher name:")
         for title in title_host_hints[:5]:
             lines.append(f"- {title} (Episode title: {title})")
 
@@ -153,6 +146,27 @@ def build_metadata_identity_answer(episodes: list[dict]) -> str:
             lines.append(f"- {title}")
 
     return "\n".join(lines)
+
+
+def _youtube_owner_name(episode: dict) -> str:
+    for key in ["uploader", "channel", "creator"]:
+        value = episode.get(key)
+        if value and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _youtube_owner_citations(episode: dict) -> list[str]:
+    citations: list[str] = []
+    for label, key in [
+        ("YouTube uploader", "uploader"),
+        ("YouTube channel", "channel"),
+        ("YouTube creator", "creator"),
+    ]:
+        value = episode.get(key)
+        if value and str(value).strip():
+            citations.append(f"{label}: {str(value).strip()}")
+    return citations
 
 
 def build_corpus_overview_answer(episodes: list[dict]) -> str:
