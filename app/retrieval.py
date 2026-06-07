@@ -67,14 +67,7 @@ def answer_question(
 
 
 def is_corpus_overview_question(question: str) -> bool:
-    normalized = " ".join(
-        question.lower()
-        .replace("?", " ")
-        .replace("!", " ")
-        .replace(".", " ")
-        .replace(",", " ")
-        .split()
-    )
+    normalized = _normalize_question(question)
     if normalized in CORPUS_OVERVIEW_PHRASES:
         return True
     return (
@@ -122,6 +115,17 @@ def build_corpus_overview_answer(episodes: list[dict]) -> str:
         "or ask a more specific question."
     )
     return "\n".join(lines)
+
+
+def _normalize_question(question: str) -> str:
+    return " ".join(
+        question.lower()
+        .replace("?", " ")
+        .replace("!", " ")
+        .replace(".", " ")
+        .replace(",", " ")
+        .split()
+    )
 
 
 def _topic_hints_from_titles(titles: list[str]) -> list[str]:

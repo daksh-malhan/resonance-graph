@@ -16,6 +16,12 @@ class EpisodeMetadata(BaseModel):
     title: str
     source_url: str
     channel: str | None = None
+    channel_id: str | None = None
+    channel_url: str | None = None
+    uploader: str | None = None
+    uploader_id: str | None = None
+    uploader_url: str | None = None
+    creator: str | None = None
     duration: float | None = None
     upload_date: str | None = None
     local_video_path: Path | None = None
@@ -70,6 +76,9 @@ class RetrievedChunk(BaseModel):
     chunk_id: str
     video_id: str
     episode_title: str
+    episode_channel: str | None = None
+    episode_uploader: str | None = None
+    episode_creator: str | None = None
     source_url: str
     text: str
     start_time: float

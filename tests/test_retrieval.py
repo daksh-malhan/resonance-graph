@@ -1,6 +1,10 @@
 from app.config import AppConfig
 from app.models import RetrievedChunk
-from app.retrieval import answer_question, is_corpus_overview_question, retrieve_context
+from app.retrieval import (
+    answer_question,
+    is_corpus_overview_question,
+    retrieve_context,
+)
 
 
 class FakeOllama:
@@ -61,6 +65,9 @@ class CorpusStore:
             },
         ]
 
+    def inspect_episode(self, video_id: str) -> dict | None:
+        return None
+
 
 class NoChatOllama:
     def embed_text(self, text: str) -> list[float]:
@@ -89,3 +96,57 @@ def test_corpus_overview_question_detection() -> None:
     assert is_corpus_overview_question("What is the data about ?")
     assert is_corpus_overview_question("summarize this dataset")
     assert not is_corpus_overview_question("What does Howard Marks say about debt?")
+
+
+class HostQuestionStore:
+    def __init__(self) -> None:
+        self.vector_search_called = False
+
+    def vector_search(
+        self,
+        question_embedding: list[float],
+        top_k: int,
+        neighbor_window: int = 0,
+        video_id: str | None = None,
+    ) -> list[RetrievedChunk]:
+        self.vector_search_called = True
+        return [
+            RetrievedChunk(
+                chunk_id="one:chunk:000000",
+                video_id="one",
+                episode_title="Martin Escobari: Trauma, Chaos & Three Industries Worth $100B | Nikhil Kamath | People by WTF",
+                episode_channel="Nikhil Kamath",
+                episode_uploader="Nikhil Kamath",
+                source_url="https://www.youtube.com/watch?v=one",
+                text="Welcome to the podcast.",
+                start_time=0,
+                end_time=10,
+                score=0.9,
+            )
+        ]
+
+
+class HostQuestionOllama:
+    def embed_text(self, text: str) -> list[float]:
+        assert text == "who owns the channel?"
+        return [0.4, 0.5, 0.6]
+
+    def chat(self, system_prompt: str, user_prompt: str) -> str:
+        assert "YouTube uploader: Nikhil Kamath" in user_prompt
+        assert "YouTube channel: Nikhil Kamath" in user_prompt
+        return "The channel metadata names Nikhil Kamath."
+
+
+def test_host_question_uses_regular_rag_context_not_hardcoded_template() -> None:
+    store = HostQuestionStore()
+
+    result = answer_question(
+        "who owns the channel?",
+        store,  # type: ignore[arg-type]
+        HostQuestionOllama(),  # type: ignore[arg-type]
+        AppConfig(),
+    )
+
+    assert store.vector_search_called is True
+    assert "The channel metadata names Nikhil Kamath." in result.answer
+    assert result.contexts

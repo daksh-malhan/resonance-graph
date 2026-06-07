@@ -87,6 +87,12 @@ class Neo4jStore:
             session.execute_write(self._merge_segments, episode["video_id"], segments)
             session.execute_write(self._merge_chunks, episode["video_id"], chunk_payload)
 
+    def upsert_episode_metadata(self, download: DownloadResult) -> None:
+        source = download.source.model_dump(mode="json")
+        episode = download.episode.model_dump(mode="json")
+        with self.driver.session() as session:
+            session.execute_write(self._merge_source_episode, source, episode)
+
     @staticmethod
     def _merge_source_episode(tx, source: dict, episode: dict) -> None:
         tx.run(
@@ -98,6 +104,12 @@ class Neo4jStore:
             MERGE (e:Episode {video_id: $episode.video_id})
             SET e.title = $episode.title,
                 e.channel = $episode.channel,
+                e.channel_id = $episode.channel_id,
+                e.channel_url = $episode.channel_url,
+                e.uploader = $episode.uploader,
+                e.uploader_id = $episode.uploader_id,
+                e.uploader_url = $episode.uploader_url,
+                e.creator = $episode.creator,
                 e.source_url = $episode.source_url,
                 e.duration = $episode.duration,
                 e.upload_date = $episode.upload_date,
@@ -193,6 +205,9 @@ class Neo4jStore:
                     RETURN node.chunk_id AS chunk_id,
                            node.video_id AS video_id,
                            e.title AS episode_title,
+                           e.channel AS episode_channel,
+                           e.uploader AS episode_uploader,
+                           e.creator AS episode_creator,
                            s.url AS source_url,
                            node.text AS text,
                            node.start_time AS start_time,
@@ -215,6 +230,9 @@ class Neo4jStore:
                 chunk_id=record["chunk_id"],
                 video_id=record["video_id"],
                 episode_title=record["episode_title"],
+                episode_channel=record.get("episode_channel"),
+                episode_uploader=record.get("episode_uploader"),
+                episode_creator=record.get("episode_creator"),
                 source_url=record["source_url"],
                 text=record["text"],
                 start_time=float(record["start_time"]),
@@ -240,6 +258,9 @@ class Neo4jStore:
             RETURN node.chunk_id AS chunk_id,
                    node.video_id AS video_id,
                    e.title AS episode_title,
+                   e.channel AS episode_channel,
+                   e.uploader AS episode_uploader,
+                   e.creator AS episode_creator,
                    s.url AS source_url,
                    node.text AS text,
                    node.start_time AS start_time,
@@ -266,6 +287,9 @@ class Neo4jStore:
                 RETURN c.chunk_id AS chunk_id,
                        c.video_id AS video_id,
                        e.title AS episode_title,
+                       e.channel AS episode_channel,
+                       e.uploader AS episode_uploader,
+                       e.creator AS episode_creator,
                        s.url AS source_url,
                        c.text AS text,
                        c.start_time AS start_time,
@@ -291,6 +315,12 @@ class Neo4jStore:
                 RETURN e.video_id AS video_id,
                        e.title AS title,
                        e.channel AS channel,
+                       e.channel_id AS channel_id,
+                       e.channel_url AS channel_url,
+                       e.uploader AS uploader,
+                       e.uploader_id AS uploader_id,
+                       e.uploader_url AS uploader_url,
+                       e.creator AS creator,
                        e.duration AS duration,
                        e.source_url AS source_url,
                        e.transcript_source AS transcript_source,
@@ -312,6 +342,12 @@ class Neo4jStore:
                 RETURN e.video_id AS video_id,
                        e.title AS title,
                        e.channel AS channel,
+                       e.channel_id AS channel_id,
+                       e.channel_url AS channel_url,
+                       e.uploader AS uploader,
+                       e.uploader_id AS uploader_id,
+                       e.uploader_url AS uploader_url,
+                       e.creator AS creator,
                        e.duration AS duration,
                        e.upload_date AS upload_date,
                        e.source_url AS source_url,
