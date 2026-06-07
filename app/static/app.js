@@ -2,6 +2,24 @@ const $ = (id) => document.getElementById(id);
 const output = $("output");
 let selectedVideoId = "";
 let graphData = { nodes: [], links: [] };
+const activeJobs = new Map();
+
+const stagePercents = {
+  queued: 2,
+  downloading: 8,
+  extracting_audio: 18,
+  fetching_captions: 30,
+  caption_ingesting: 44,
+  caption_ready: 58,
+  local_transcription_queued: 64,
+  local_transcribing: 70,
+  merging_transcripts: 82,
+  chunking: 88,
+  embedding_chunks: 93,
+  writing_graph: 97,
+  complete: 100,
+  failed: 100,
+};
 
 function write(text) {
   output.textContent = `${new Date().toLocaleTimeString()}  ${text}\n\n${output.textContent}`;
@@ -48,12 +66,23 @@ async function setupDb() {
 async function startJob(path, payload) {
   const data = await api(path, jsonBody(payload));
   write(`Started job ${data.job_id}`);
+  activeJobs.set(data.job_id, {
+    id: data.job_id,
+    kind: path.includes("channel") ? "ingest-channel" : "ingest-url",
+    state: "queued",
+    message: "Queued",
+    progress: { percent: 0, label: "Queued", detail: "" },
+    items: [],
+  });
+  renderProgressBoard();
   pollJob(data.job_id);
 }
 
 async function pollJob(jobId) {
   const data = await api(`/api/jobs/${jobId}`);
   const job = data.job;
+  activeJobs.set(jobId, job);
+  renderProgressBoard();
   write(`${job.kind}: ${job.state} - ${job.message}`);
   if (job.state === "queued" || job.state === "running") {
     if (["caption_ingesting", "writing_graph", "caption_ready", "local_transcribing", "merging_transcripts"].includes(job.stage)) {
@@ -75,6 +104,8 @@ async function pollJob(jobId) {
 async function pollBackgroundJob(jobId) {
   const data = await api(`/api/background-jobs/${jobId}`);
   const job = data.job;
+  activeJobs.set(`background-${jobId}`, backgroundJobToProgress(job));
+  renderProgressBoard();
   write(`local merge: ${job.state} - ${job.message}`);
   if (job.state === "queued" || job.state === "running") {
     if (["writing_graph", "complete", "embedding_chunks", "merging_transcripts"].includes(job.stage)) {
@@ -86,8 +117,110 @@ async function pollBackgroundJob(jobId) {
   }
   if (job.error) write(job.error);
   if (job.result) write(JSON.stringify(job.result, null, 2));
+  activeJobs.set(`background-${jobId}`, backgroundJobToProgress(job));
+  renderProgressBoard();
   await refreshEpisodes();
   await refreshGraph();
+}
+
+function backgroundJobToProgress(job) {
+  const percent = stagePercents[job.stage] ?? (job.state === "succeeded" ? 100 : 12);
+  const title = job.result?.title || job.video_id || "Local transcript verification";
+  return {
+    id: `background-${job.id}`,
+    kind: "local-finalization",
+    state: job.state,
+    message: job.message,
+    progress: {
+      percent,
+      stage: job.stage,
+      label: "Local verification",
+      detail: job.message,
+    },
+    items: [
+      {
+        title,
+        video_id: job.video_id,
+        state: job.state,
+        stage: job.stage,
+        message: job.message,
+        percent,
+      },
+    ],
+  };
+}
+
+function renderProgressBoard() {
+  const board = $("progressBoard");
+  if (!board) return;
+  const jobs = [...activeJobs.values()].filter((job) => job.state !== "succeeded" || recent(job.finished_at));
+  $("progressSummary").textContent = jobs.length ? `${jobs.length} active` : "Idle";
+  if (!jobs.length) {
+    board.innerHTML = '<div class="progress-empty">No active ingestion jobs.</div>';
+    return;
+  }
+  board.innerHTML = jobs.map(renderJobProgress).join("");
+}
+
+function recent(timestamp) {
+  if (!timestamp) return true;
+  return Date.now() / 1000 - Number(timestamp) < 90;
+}
+
+function renderJobProgress(job) {
+  const progress = job.progress || { percent: 0, label: "Queued", detail: job.message || "" };
+  const items = job.items?.length ? job.items : [{
+    title: job.result?.title || job.kind,
+    state: job.state,
+    stage: job.stage || progress.stage,
+    message: job.message,
+    percent: progress.percent,
+  }];
+  return `
+    <article class="progress-job ${job.state}">
+      <div class="progress-job-head">
+        <div>
+          <span class="progress-kicker">${escapeHtml(job.kind || "job")}</span>
+          <strong>${escapeHtml(progress.label || job.message || "Working")}</strong>
+        </div>
+        <span class="progress-percent">${safePercent(progress.percent)}%</span>
+      </div>
+      <div class="progress-track main" aria-label="${escapeHtml(progress.label || "Job progress")}">
+        <span style="width: ${safePercent(progress.percent)}%"></span>
+      </div>
+      <p class="progress-detail">${escapeHtml(progress.detail || job.message || "")}</p>
+      <div class="progress-items">
+        ${items.map(renderProgressItem).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderProgressItem(item) {
+  return `
+    <div class="progress-item ${item.state || ""}">
+      <div class="progress-meta">
+        <strong>${escapeHtml(item.title || item.video_id || "Video")}</strong>
+        <span>${escapeHtml(item.message || item.stage || "")}</span>
+      </div>
+      <div class="progress-track" aria-label="${escapeHtml(item.title || "Video progress")}">
+        <span style="width: ${safePercent(item.percent)}%"></span>
+      </div>
+    </div>
+  `;
+}
+
+function safePercent(value) {
+  return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 async function previewChannel() {
@@ -363,5 +496,6 @@ function bind() {
 }
 
 bind();
+renderProgressBoard();
 refreshStatus().catch((error) => write(error.message));
 refreshEpisodes().then(refreshGraph).catch((error) => write(error.message));

@@ -26,6 +26,23 @@ from app.youtube import discover_channel_videos
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+STAGE_PROGRESS = {
+    "queued": 2,
+    "downloading": 8,
+    "extracting_audio": 18,
+    "fetching_captions": 30,
+    "caption_ingesting": 44,
+    "caption_ready": 58,
+    "local_transcription_queued": 64,
+    "local_transcribing": 70,
+    "merging_transcripts": 82,
+    "chunking": 88,
+    "embedding_chunks": 93,
+    "writing_graph": 97,
+    "complete": 100,
+    "failed": 100,
+}
+
 
 class JobStore:
     def __init__(self) -> None:
@@ -44,6 +61,13 @@ class JobStore:
                 "finished_at": None,
                 "result": None,
                 "error": None,
+                "progress": {
+                    "percent": 0,
+                    "stage": "queued",
+                    "label": "Queued",
+                    "detail": "",
+                },
+                "items": [],
             }
         return job_id
 
@@ -292,7 +316,21 @@ def start_ingest_url_job(state: WebState, body: dict[str, Any]) -> str:
 
     def run() -> None:
         def on_stage(stage: str, message: str) -> None:
-            state.jobs.update(job_id, state="running", stage=stage, message=message)
+            state.jobs.update(
+                job_id,
+                state="running",
+                stage=stage,
+                message=message,
+                progress=progress_payload(stage, message),
+                items=[
+                    progress_item(
+                        title="Video ingest",
+                        stage=stage,
+                        message=message,
+                        state="running",
+                    )
+                ],
+            )
 
         state.jobs.update(
             job_id,
@@ -300,6 +338,15 @@ def start_ingest_url_job(state: WebState, body: dict[str, Any]) -> str:
             stage="queued",
             message="Ingesting video",
             started_at=time.time(),
+            progress=progress_payload("queued", "Ingesting video"),
+            items=[
+                progress_item(
+                    title="Video ingest",
+                    stage="queued",
+                    message="Preparing ingest",
+                    state="running",
+                )
+            ],
         )
         try:
             download, chunks = ingest_url_pipeline(
@@ -315,6 +362,17 @@ def start_ingest_url_job(state: WebState, body: dict[str, Any]) -> str:
                 stage="complete",
                 message="Video ingested",
                 finished_at=time.time(),
+                progress=progress_payload("complete", "Video ingested"),
+                items=[
+                    progress_item(
+                        title=download.episode.title,
+                        video_id=download.episode.video_id,
+                        stage="complete",
+                        message=download.episode.transcript_status or "Video ingested",
+                        state="succeeded",
+                        percent=100,
+                    )
+                ],
                 result={
                     "video_id": download.episode.video_id,
                     "title": download.episode.title,
@@ -333,6 +391,16 @@ def start_ingest_url_job(state: WebState, body: dict[str, Any]) -> str:
                 message="Video ingest failed",
                 finished_at=time.time(),
                 error=str(exc),
+                progress=progress_payload("failed", "Video ingest failed"),
+                items=[
+                    progress_item(
+                        title="Video ingest",
+                        stage="failed",
+                        message=str(exc),
+                        state="failed",
+                        percent=100,
+                    )
+                ],
             )
 
     threading.Thread(target=run, daemon=True).start()
@@ -354,7 +422,14 @@ def start_ingest_channel_job(state: WebState, body: dict[str, Any]) -> str:
             job_id,
             state="running",
             message="Discovering channel videos",
+            stage="discovering",
             started_at=time.time(),
+            progress={
+                "percent": 1,
+                "stage": "discovering",
+                "label": "Discovering channel videos",
+                "detail": "",
+            },
             result={"succeeded": 0, "failed": 0, "total": 0, "items": []},
         )
         try:
@@ -365,20 +440,67 @@ def start_ingest_channel_job(state: WebState, body: dict[str, Any]) -> str:
                 limit=limit,
             )
             result = {"succeeded": 0, "failed": 0, "total": len(videos), "items": []}
+            progress_items = [
+                progress_item(
+                    title=video.title,
+                    video_id=video.video_id,
+                    stage="queued",
+                    message="Waiting",
+                    state="queued",
+                    percent=0,
+                )
+                for video in videos
+            ]
+            state.jobs.update(
+                job_id,
+                stage="queued",
+                progress=channel_progress_payload(progress_items),
+                items=progress_items,
+                result=result,
+            )
             for index, video in enumerate(videos, start=1):
                 state.jobs.update(
                     job_id,
                     message=f"Ingesting {index}/{len(videos)}: {video.title}",
+                    progress=channel_progress_payload(progress_items),
+                    items=progress_items,
                     result=result,
                 )
                 try:
+                    def on_stage(stage: str, message: str) -> None:
+                        progress_items[index - 1] = progress_item(
+                            title=video.title,
+                            video_id=video.video_id,
+                            stage=stage,
+                            message=message,
+                            state="running",
+                        )
+                        state.jobs.update(
+                            job_id,
+                            state="running",
+                            stage=stage,
+                            message=f"{index}/{len(videos)}: {message}",
+                            progress=channel_progress_payload(progress_items),
+                            items=progress_items,
+                            result=result,
+                        )
+
                     download, chunks = ingest_url_pipeline(
                         video.url,
                         state.config,
                         force=force,
+                        stage_callback=on_stage,
                         background_local=True,
                     )
                     result["succeeded"] += 1
+                    progress_items[index - 1] = progress_item(
+                        title=download.episode.title,
+                        video_id=download.episode.video_id,
+                        stage="complete",
+                        message=download.episode.transcript_status or "Video ingested",
+                        state="succeeded",
+                        percent=100,
+                    )
                     result["items"].append(
                         {
                             "video_id": download.episode.video_id,
@@ -391,6 +513,14 @@ def start_ingest_channel_job(state: WebState, body: dict[str, Any]) -> str:
                     )
                 except Exception as exc:
                     result["failed"] += 1
+                    progress_items[index - 1] = progress_item(
+                        title=video.title,
+                        video_id=video.video_id,
+                        stage="failed",
+                        message=str(exc),
+                        state="failed",
+                        percent=100,
+                    )
                     result["items"].append(
                         {
                             "video_id": video.video_id,
@@ -405,8 +535,11 @@ def start_ingest_channel_job(state: WebState, body: dict[str, Any]) -> str:
             state.jobs.update(
                 job_id,
                 state="succeeded" if result["failed"] == 0 else "failed",
+                stage="complete" if result["failed"] == 0 else "failed",
                 message="Channel ingest complete",
                 finished_at=time.time(),
+                progress=channel_progress_payload(progress_items),
+                items=progress_items,
                 result=result,
                 error=None if result["failed"] == 0 else f"{result['failed']} video(s) failed",
             )
@@ -414,9 +547,11 @@ def start_ingest_channel_job(state: WebState, body: dict[str, Any]) -> str:
             state.jobs.update(
                 job_id,
                 state="failed",
+                stage="failed",
                 message="Channel ingest failed",
                 finished_at=time.time(),
                 error=str(exc),
+                progress=progress_payload("failed", "Channel ingest failed"),
             )
 
     threading.Thread(target=run, daemon=True).start()
@@ -454,6 +589,58 @@ def _optional_int(value: Any) -> int | None:
     if parsed < 0:
         raise AppError("Numeric values must be zero or greater.")
     return parsed
+
+
+def progress_payload(stage: str, message: str, percent: int | None = None) -> dict[str, Any]:
+    return {
+        "percent": percent if percent is not None else STAGE_PROGRESS.get(stage, 5),
+        "stage": stage,
+        "label": stage.replace("_", " ").title(),
+        "detail": message,
+    }
+
+
+def progress_item(
+    title: str,
+    stage: str,
+    message: str,
+    state: str,
+    video_id: str | None = None,
+    percent: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "title": title,
+        "video_id": video_id,
+        "state": state,
+        "stage": stage,
+        "message": message,
+        "percent": percent if percent is not None else STAGE_PROGRESS.get(stage, 5),
+    }
+
+
+def channel_progress_payload(items: list[dict[str, Any]]) -> dict[str, Any]:
+    if not items:
+        return {
+            "percent": 100,
+            "stage": "complete",
+            "label": "Channel ingest",
+            "detail": "No matching videos found",
+        }
+    percent = round(sum(int(item.get("percent") or 0) for item in items) / len(items))
+    running = next((item for item in items if item.get("state") == "running"), None)
+    completed = sum(1 for item in items if item.get("state") == "succeeded")
+    failed = sum(1 for item in items if item.get("state") == "failed")
+    detail = f"{completed} complete"
+    if failed:
+        detail += f", {failed} failed"
+    if running:
+        detail += f" · {running.get('title')}"
+    return {
+        "percent": percent,
+        "stage": running.get("stage") if running else "complete" if completed + failed == len(items) else "queued",
+        "label": "Channel ingest",
+        "detail": detail,
+    }
 
 
 def run_server(host: str, port: int) -> None:
