@@ -1,5 +1,14 @@
+from pathlib import Path
+
+from app.config import AppConfig
 from app.models import Transcript, TranscriptSegment
-from app.transcription import merge_transcripts
+from app.transcription import (
+    local_transcript_path_for,
+    merge_transcripts,
+    preserve_primary_local_transcript,
+    transcript_path_for,
+)
+from app.utils import write_json
 
 
 def _segment(source: str, index: int, start: float, end: float, text: str) -> TranscriptSegment:
@@ -50,3 +59,27 @@ def test_merge_preserves_caption_when_local_has_gap() -> None:
     merged = merge_transcripts(captions, local, "vid")
 
     assert [segment.text for segment in merged.segments] == ["local first", "caption gap"]
+
+
+def test_preserve_primary_local_transcript_before_caption_overwrite(tmp_path: Path) -> None:
+    config = AppConfig(
+        youtube_download_dir=tmp_path / "youtube",
+        audio_output_dir=tmp_path / "audio",
+        transcript_output_dir=tmp_path / "transcripts",
+        chunk_output_dir=tmp_path / "chunks",
+        embedding_cache_dir=tmp_path / "embeddings",
+        model_cache_dir=tmp_path / "models",
+    )
+    local = Transcript(
+        video_id="vid",
+        source="local_whisper",
+        segments=[_segment("local_whisper", 0, 0, 5, "local text")],
+    )
+    write_json(transcript_path_for("vid", config), local)
+
+    preserved = preserve_primary_local_transcript("vid", config)
+
+    assert preserved is not None
+    assert local_transcript_path_for("vid", config).exists()
+    assert preserved.source == "local_whisper"
+    assert preserved.segments[0].text == "local text"

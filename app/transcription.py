@@ -35,6 +35,18 @@ def transcribe_audio(
     if output_path.exists() and not force:
         logger.info("Using cached local transcript %s", output_path)
         return read_model(output_path, Transcript)
+    primary_path = transcript_path_for(video_id, config)
+    if primary_path.exists() and not force:
+        primary = read_model(primary_path, Transcript)
+        if primary.source in {LOCAL_SOURCE, "local_whisper"}:
+            logger.info("Migrating existing primary local transcript to %s", output_path)
+            primary = primary.model_copy(update={"source": LOCAL_SOURCE})
+            primary.segments[:] = [
+                segment.model_copy(update={"source": LOCAL_SOURCE})
+                for segment in primary.segments
+            ]
+            write_json(output_path, primary)
+            return primary
 
     backend = _local_backend(config)
     if backend == "faster-whisper":
@@ -68,6 +80,27 @@ def write_primary_transcript(transcript: Transcript, config: AppConfig) -> Trans
     output_path = transcript_path_for(transcript.video_id, config)
     write_json(output_path, transcript)
     return transcript
+
+
+def preserve_primary_local_transcript(video_id: str, config: AppConfig) -> Transcript | None:
+    local_path = local_transcript_path_for(video_id, config)
+    if local_path.exists():
+        return read_model(local_path, Transcript)
+
+    primary_path = transcript_path_for(video_id, config)
+    if not primary_path.exists():
+        return None
+
+    primary = read_model(primary_path, Transcript)
+    if primary.source not in {LOCAL_SOURCE, "local_whisper"}:
+        return None
+
+    primary = primary.model_copy(update={"source": LOCAL_SOURCE})
+    primary.segments[:] = [
+        segment.model_copy(update={"source": LOCAL_SOURCE}) for segment in primary.segments
+    ]
+    write_json(local_path, primary)
+    return primary
 
 
 def merge_transcripts(

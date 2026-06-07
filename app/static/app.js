@@ -55,6 +55,10 @@ async function pollJob(jobId) {
   const job = data.job;
   write(`${job.kind}: ${job.state} - ${job.message}`);
   if (job.state === "queued" || job.state === "running") {
+    if (["caption_ingesting", "writing_graph", "caption_ready", "local_transcribing", "merging_transcripts"].includes(job.stage)) {
+      await refreshEpisodes();
+      await refreshGraph();
+    }
     window.setTimeout(() => pollJob(jobId), 3000);
     return;
   }

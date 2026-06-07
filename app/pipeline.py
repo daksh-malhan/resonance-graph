@@ -10,7 +10,12 @@ from app.config import AppConfig
 from app.models import DownloadResult, Transcript, TranscriptChunk
 from app.neo4j_store import Neo4jStore
 from app.ollama import OllamaClient, embed_chunks
-from app.transcription import merge_transcripts, transcribe_audio, write_primary_transcript
+from app.transcription import (
+    merge_transcripts,
+    preserve_primary_local_transcript,
+    transcribe_audio,
+    write_primary_transcript,
+)
 from app.youtube import download_youtube_video
 
 logger = logging.getLogger(__name__)
@@ -39,6 +44,7 @@ def ingest_url_pipeline(
     final_chunks: list[TranscriptChunk] = []
     if caption_transcript and caption_transcript.segments:
         _stage(stage_callback, "caption_ingesting", "Ingesting caption transcript")
+        preserve_primary_local_transcript(download.episode.video_id, config)
         write_primary_transcript(caption_transcript, config)
         final_download, final_chunks = _ingest_transcript(
             download,
@@ -49,6 +55,7 @@ def ingest_url_pipeline(
             transcript_status="caption_ready",
             stage_callback=stage_callback,
         )
+        _stage(stage_callback, "caption_ready", "Caption transcript is searchable")
 
     if caption_transcript and not config.background_local_transcription:
         _stage(stage_callback, "complete", "Caption transcript ingested")
