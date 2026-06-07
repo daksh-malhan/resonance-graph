@@ -3,7 +3,6 @@ from app.models import RetrievedChunk
 from app.retrieval import (
     answer_question,
     is_corpus_overview_question,
-    is_metadata_identity_question,
     retrieve_context,
 )
 
@@ -99,70 +98,55 @@ def test_corpus_overview_question_detection() -> None:
     assert not is_corpus_overview_question("What does Howard Marks say about debt?")
 
 
-class MetadataStore:
-    def vector_search(self, *args, **kwargs):
-        raise AssertionError("metadata identity questions should not run vector search")
+class HostQuestionStore:
+    def __init__(self) -> None:
+        self.vector_search_called = False
 
-    def list_episodes(self) -> list[dict]:
+    def vector_search(
+        self,
+        question_embedding: list[float],
+        top_k: int,
+        neighbor_window: int = 0,
+        video_id: str | None = None,
+    ) -> list[RetrievedChunk]:
+        self.vector_search_called = True
         return [
-            {
-                "title": "Martin Escobari: Trauma, Chaos & Three Industries Worth $100B | Nikhil Kamath | People by WTF",
-                "video_id": "one",
-                "channel": "Nikhil Kamath",
-                "uploader": "Nikhil Kamath",
-                "uploader_id": "@nikhil.kamath",
-                "chunk_count": 114,
-            },
-            {
-                "title": "The World Bank President On Why Jobs Fix Everything | Ajay Banga x Nikhil Kamath | People by WTF",
-                "video_id": "two",
-                "channel": "Nikhil Kamath",
-                "uploader": "Nikhil Kamath",
-                "uploader_id": "@nikhil.kamath",
-                "chunk_count": 109,
-            },
+            RetrievedChunk(
+                chunk_id="one:chunk:000000",
+                video_id="one",
+                episode_title="Martin Escobari: Trauma, Chaos & Three Industries Worth $100B | Nikhil Kamath | People by WTF",
+                episode_channel="Nikhil Kamath",
+                episode_uploader="Nikhil Kamath",
+                source_url="https://www.youtube.com/watch?v=one",
+                text="Welcome to the podcast.",
+                start_time=0,
+                end_time=10,
+                score=0.9,
+            )
         ]
 
-    def inspect_episode(self, video_id: str) -> dict | None:
-        return {
-            "title": "Martin Escobari: Trauma, Chaos & Three Industries Worth $100B | Nikhil Kamath | People by WTF",
-            "video_id": video_id,
-            "channel": "Nikhil Kamath",
-            "uploader": "Nikhil Kamath",
-            "uploader_id": "@nikhil.kamath",
-            "chunk_count": 114,
-        }
+
+class HostQuestionOllama:
+    def embed_text(self, text: str) -> list[float]:
+        assert text == "who owns the channel?"
+        return [0.4, 0.5, 0.6]
+
+    def chat(self, system_prompt: str, user_prompt: str) -> str:
+        assert "YouTube uploader: Nikhil Kamath" in user_prompt
+        assert "YouTube channel: Nikhil Kamath" in user_prompt
+        return "The channel metadata names Nikhil Kamath."
 
 
-def test_metadata_identity_question_uses_channel_without_llm() -> None:
-    result = answer_question(
-        "who is the host?",
-        MetadataStore(),  # type: ignore[arg-type]
-        NoChatOllama(),  # type: ignore[arg-type]
-        AppConfig(),
-    )
+def test_host_question_uses_regular_rag_context_not_hardcoded_template() -> None:
+    store = HostQuestionStore()
 
-    assert "Nikhil Kamath" in result.answer
-    assert "channel owner or publisher" in result.answer
-    assert "YouTube uploader: Nikhil Kamath" in result.answer
-    assert "YouTube channel: Nikhil Kamath" in result.answer
-    assert result.contexts == []
-
-
-def test_scoped_metadata_identity_question_uses_inspect_episode() -> None:
     result = answer_question(
         "who owns the channel?",
-        MetadataStore(),  # type: ignore[arg-type]
-        NoChatOllama(),  # type: ignore[arg-type]
+        store,  # type: ignore[arg-type]
+        HostQuestionOllama(),  # type: ignore[arg-type]
         AppConfig(),
-        video_id="one",
     )
 
-    assert "Nikhil Kamath" in result.answer
-    assert "Martin Escobari" in result.answer
-
-
-def test_metadata_identity_question_detection() -> None:
-    assert is_metadata_identity_question("who hosts this podcast?")
-    assert is_metadata_identity_question("who owns the channel?")
-    assert not is_metadata_identity_question("what does the guest say about debt?")
+    assert store.vector_search_called is True
+    assert "The channel metadata names Nikhil Kamath." in result.answer
+    assert result.contexts

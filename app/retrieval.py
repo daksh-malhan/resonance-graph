@@ -50,13 +50,6 @@ def answer_question(
     neighbor_window: int = 1,
     video_id: str | None = None,
 ) -> RagAnswer:
-    if is_metadata_identity_question(question):
-        episodes = [store.inspect_episode(video_id)] if video_id else store.list_episodes()
-        return RagAnswer(
-            answer=build_metadata_identity_answer([episode for episode in episodes if episode]),
-            contexts=[],
-        )
-
     if video_id is None and is_corpus_overview_question(question):
         return RagAnswer(answer=build_corpus_overview_answer(store.list_episodes()), contexts=[])
 
@@ -82,91 +75,6 @@ def is_corpus_overview_question(question: str) -> bool:
         and any(term in normalized for term in ["about", "summarize", "summarise", "overview"])
         and len(normalized.split()) <= 8
     )
-
-
-def is_metadata_identity_question(question: str) -> bool:
-    normalized = _normalize_question(question)
-    words = set(normalized.split())
-    identity_terms = {
-        "host",
-        "hosts",
-        "hosted",
-        "hosting",
-        "owner",
-        "owns",
-        "owned",
-        "channel",
-        "uploader",
-        "publisher",
-        "podcast",
-        "show",
-    }
-    question_terms = {"who", "whose", "which", "what", "is", "are"}
-    return bool(words & identity_terms) and bool(words & question_terms) and len(words) <= 14
-
-
-def build_metadata_identity_answer(episodes: list[dict]) -> str:
-    if not episodes:
-        return "I do not have stored episode metadata for that selection."
-
-    owners = sorted({_youtube_owner_name(episode) for episode in episodes if _youtube_owner_name(episode)})
-    titles = [str(episode.get("title") or episode.get("video_id")) for episode in episodes]
-
-    if not owners:
-        return (
-            "The stored YouTube metadata does not include channel, uploader, or creator fields "
-            "for that selection. I cannot identify the channel owner or publisher from metadata alone."
-        )
-
-    lines: list[str] = []
-    if len(owners) == 1:
-        owner = owners[0]
-        citations = _youtube_owner_citations(episodes[0])
-        lines.append(f"The stored YouTube metadata identifies `{owner}` as the channel owner or publisher.")
-        if citations:
-            lines.append("Metadata source: " + "; ".join(citations))
-    else:
-        lines.append(
-            "The selected data has multiple YouTube channel/uploader metadata values: "
-            + ", ".join(f"`{owner}`" for owner in owners)
-            + ". Treat these as YouTube metadata, not transcript proof."
-        )
-
-    title_host_hints = [title for title in titles if any(owner in title for owner in owners)]
-    if title_host_hints:
-        lines.append("")
-        lines.append("Title metadata also mentions the same owner/publisher name:")
-        for title in title_host_hints[:5]:
-            lines.append(f"- {title} (Episode title: {title})")
-
-    if len(titles) > len(title_host_hints):
-        lines.append("")
-        lines.append("Episode metadata checked:")
-        for title in titles[:5]:
-            lines.append(f"- {title}")
-
-    return "\n".join(lines)
-
-
-def _youtube_owner_name(episode: dict) -> str:
-    for key in ["uploader", "channel", "creator"]:
-        value = episode.get(key)
-        if value and str(value).strip():
-            return str(value).strip()
-    return ""
-
-
-def _youtube_owner_citations(episode: dict) -> list[str]:
-    citations: list[str] = []
-    for label, key in [
-        ("YouTube uploader", "uploader"),
-        ("YouTube channel", "channel"),
-        ("YouTube creator", "creator"),
-    ]:
-        value = episode.get(key)
-        if value and str(value).strip():
-            citations.append(f"{label}: {str(value).strip()}")
-    return citations
 
 
 def build_corpus_overview_answer(episodes: list[dict]) -> str:
