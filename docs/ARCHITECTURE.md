@@ -31,27 +31,32 @@ Resonance Graph is built as a modular local pipeline. The MVP focuses on transcr
    - Preserves chunk start/end timestamps and source segment IDs.
    - Writes chunk JSON for debugging and cache reuse.
 
-6. `ollama.py`
+6. `roles.py`
+   - Extracts generic role candidates from YouTube metadata, titles, descriptions, and transcript intros.
+   - Stores channel/uploader/creator as actual metadata roles, not inferred hosts.
+   - Adds `possible_host` and `possible_guest` only when reusable evidence patterns support them.
+
+7. `ollama.py`
    - Talks to the local Ollama HTTP API.
    - Creates embeddings for chunks and questions.
    - Calls the configured chat model for answer generation.
 
-7. `neo4j_store.py`
+8. `neo4j_store.py`
    - Creates constraints, indexes, and the vector index.
-   - Upserts `Source`, `Episode`, `TranscriptSegment`, and `Chunk` nodes.
+   - Upserts `Source`, `Episode`, `TranscriptSegment`, `Chunk`, `RoleCandidate`, and `Person` nodes.
    - Runs vector retrieval and graph overview queries.
 
-8. `retrieval.py`
+9. `retrieval.py`
    - Embeds questions.
    - Retrieves relevant chunks from Neo4j, optionally scoped to one episode.
    - Formats retrieved context.
    - Generates transcript-grounded answers.
 
-9. `web.py` and `app/static/`
+10. `web.py` and `app/static/`
    - Provide the local website and JSON endpoints.
    - Reuse the same pipeline modules as the CLI.
 
-10. `background_jobs.py` and `worker.py`
+11. `background_jobs.py` and `worker.py`
    - Store detached local transcription job state as JSON under `data/jobs`.
    - Run local Whisper, transcript merge, re-chunking, re-embedding, and Neo4j updates after caption-ready ingest returns.
    - Preserve resumability through cached media, audio, captions, local transcripts, chunks, and embeddings.
@@ -64,7 +69,11 @@ erDiagram
   Episode ||--o{ Chunk : HAS_CHUNK
   Episode ||--o{ TranscriptSegment : HAS_SEGMENT
   Chunk }o--o{ TranscriptSegment : CONTAINS_SEGMENT
+  Episode ||--o{ RoleCandidate : HAS_ROLE_CANDIDATE
+  RoleCandidate }o--|| Person : REFERS_TO
 ```
+
+Role candidates are evidence records, not final truth. A channel/uploader node can answer who published or uploaded a video. Host identity should be answered from `host` or `possible_host` candidates plus their evidence source and confidence.
 
 ## Idempotency
 
@@ -84,6 +93,7 @@ Near-term extensions should add modules rather than overloading existing ones:
 - `ocr.py` for frame text.
 - `vision.py` for local vision captions.
 - `entities.py` for entity/topic/claim extraction.
+- LLM-backed role extraction that emits validated JSON into the existing `RoleCandidate` model.
 - `api.py` for a future FastAPI backend.
 - `reranking.py` for retrieval reranking.
 

@@ -24,6 +24,7 @@ This project does not support bypassing DRM, paywalls, private videos, login-onl
 - Timestamp-preserving transcript chunks.
 - Local embeddings through Ollama.
 - Neo4j graph storage with vector search.
+- Generic YouTube metadata role extraction for publishers, uploaders, creators, and evidence-backed possible hosts/guests.
 - Local RAG answers with timestamp citations.
 - Minimal local web app for ingestion, search, graph visualization, and admin actions.
 - CLI for repeatable workflows.
@@ -69,6 +70,8 @@ Core graph labels:
 - `Episode`
 - `TranscriptSegment`
 - `Chunk`
+- `RoleCandidate`
+- `Person`
 
 Core relationships:
 
@@ -76,6 +79,10 @@ Core relationships:
 - `(:Episode)-[:HAS_CHUNK]->(:Chunk)`
 - `(:Episode)-[:HAS_SEGMENT]->(:TranscriptSegment)`
 - `(:Chunk)-[:CONTAINS_SEGMENT]->(:TranscriptSegment)`
+- `(:Episode)-[:HAS_ROLE_CANDIDATE]->(:RoleCandidate)`
+- `(:RoleCandidate)-[:REFERS_TO]->(:Person)`
+
+Role candidates are generic and evidence-backed. YouTube channel/uploader/creator fields are stored as their real metadata roles. Host or guest roles are only added when a reusable title, description, or transcript-intro pattern supports them, and uncertain roles are stored as `possible_host` or `possible_guest`.
 
 ## Requirements
 
@@ -427,6 +434,7 @@ app/
   pipeline.py           End-to-end ingestion pipeline
   prompts.py            RAG context and answer prompt formatting
   retrieval.py          Question answering flow
+  roles.py              Generic metadata/transcript role candidate extraction
   transcription.py      Local transcription backends
   web.py                Local HTTP app and JSON API
   youtube.py            yt-dlp download and channel discovery

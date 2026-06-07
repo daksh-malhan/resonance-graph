@@ -22,6 +22,7 @@ class EpisodeMetadata(BaseModel):
     uploader_id: str | None = None
     uploader_url: str | None = None
     creator: str | None = None
+    description: str | None = None
     duration: float | None = None
     upload_date: str | None = None
     local_video_path: Path | None = None
@@ -72,6 +73,14 @@ class TranscriptChunk(BaseModel):
     transcript_source: str = "local_whisper"
 
 
+class RoleCandidate(BaseModel):
+    name: str
+    role: str
+    confidence: float
+    evidence_source: str
+    evidence_text: str
+
+
 class RetrievedChunk(BaseModel):
     chunk_id: str
     video_id: str
@@ -79,6 +88,7 @@ class RetrievedChunk(BaseModel):
     episode_channel: str | None = None
     episode_uploader: str | None = None
     episode_creator: str | None = None
+    episode_role_candidates: list[RoleCandidate] = Field(default_factory=list)
     source_url: str
     text: str
     start_time: float

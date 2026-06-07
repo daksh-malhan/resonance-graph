@@ -25,5 +25,6 @@ def test_parse_youtube_metadata_fixture(tmp_path: Path) -> None:
     assert metadata.uploader_id == "@openmedia"
     assert metadata.uploader_url == "https://www.youtube.com/@openmedia"
     assert metadata.creator == "Open Media Creator"
+    assert metadata.description == "An example approved Creative Commons talk hosted by Taylor Quinn."
     assert metadata.local_video_path == video_file
     assert metadata.info_json_path == info_json

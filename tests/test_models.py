@@ -1,4 +1,4 @@
-from app.models import EpisodeMetadata, RetrievedChunk, TranscriptChunk, TranscriptSegment
+from app.models import EpisodeMetadata, RetrievedChunk, RoleCandidate, TranscriptChunk, TranscriptSegment
 
 
 def test_pydantic_models_accept_mvp_fields() -> None:
@@ -31,6 +31,15 @@ def test_pydantic_models_accept_mvp_fields() -> None:
         episode_channel="Example Channel",
         episode_uploader="Example Uploader",
         episode_creator="Example Creator",
+        episode_role_candidates=[
+            RoleCandidate(
+                name="Example Host",
+                role="possible_host",
+                confidence=0.72,
+                evidence_source="title_pattern",
+                evidence_text="Example Guest x Example Host",
+            )
+        ],
         source_url=episode.source_url,
         text=chunk.text,
         start_time=chunk.start_time,
@@ -43,3 +52,4 @@ def test_pydantic_models_accept_mvp_fields() -> None:
     assert retrieved.episode_channel == "Example Channel"
     assert retrieved.episode_uploader == "Example Uploader"
     assert retrieved.episode_creator == "Example Creator"
+    assert retrieved.episode_role_candidates[0].name == "Example Host"

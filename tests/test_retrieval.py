@@ -114,9 +114,9 @@ class HostQuestionStore:
             RetrievedChunk(
                 chunk_id="one:chunk:000000",
                 video_id="one",
-                episode_title="Martin Escobari: Trauma, Chaos & Three Industries Worth $100B | Nikhil Kamath | People by WTF",
-                episode_channel="Nikhil Kamath",
-                episode_uploader="Nikhil Kamath",
+                episode_title="Founder Interview x Example Host | Open Podcast",
+                episode_channel="Open Podcast",
+                episode_uploader="Example Host",
                 source_url="https://www.youtube.com/watch?v=one",
                 text="Welcome to the podcast.",
                 start_time=0,
@@ -132,9 +132,9 @@ class HostQuestionOllama:
         return [0.4, 0.5, 0.6]
 
     def chat(self, system_prompt: str, user_prompt: str) -> str:
-        assert "YouTube uploader: Nikhil Kamath" in user_prompt
-        assert "YouTube channel: Nikhil Kamath" in user_prompt
-        return "The channel metadata names Nikhil Kamath."
+        assert "YouTube uploader: Example Host" in user_prompt
+        assert "YouTube channel: Open Podcast" in user_prompt
+        return "The channel metadata names Open Podcast."
 
 
 def test_host_question_uses_regular_rag_context_not_hardcoded_template() -> None:
@@ -148,5 +148,5 @@ def test_host_question_uses_regular_rag_context_not_hardcoded_template() -> None
     )
 
     assert store.vector_search_called is True
-    assert "The channel metadata names Nikhil Kamath." in result.answer
+    assert "The channel metadata names Open Podcast." in result.answer
     assert result.contexts

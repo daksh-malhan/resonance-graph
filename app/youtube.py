@@ -33,6 +33,7 @@ def parse_youtube_metadata(info: dict[str, Any], episode_dir: Path) -> EpisodeMe
         uploader_id=info.get("uploader_id"),
         uploader_url=info.get("uploader_url"),
         creator=info.get("creator"),
+        description=info.get("description"),
         source_url=info.get("webpage_url") or info.get("original_url") or "",
         duration=info.get("duration"),
         upload_date=info.get("upload_date"),

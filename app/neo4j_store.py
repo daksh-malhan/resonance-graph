@@ -8,7 +8,8 @@ from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
 from app.config import AppConfig
 from app.errors import AppError
-from app.models import DownloadResult, RetrievedChunk, Transcript, TranscriptChunk
+from app.models import DownloadResult, RetrievedChunk, RoleCandidate, Transcript, TranscriptChunk
+from app.roles import extract_role_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +49,10 @@ class Neo4jStore:
                 "CREATE CONSTRAINT segment_id_unique IF NOT EXISTS "
                 "FOR (s:TranscriptSegment) REQUIRE s.segment_id IS UNIQUE"
             ),
+            "CREATE CONSTRAINT person_name_unique IF NOT EXISTS FOR (p:Person) REQUIRE p.name IS UNIQUE",
             "CREATE INDEX source_url_index IF NOT EXISTS FOR (s:Source) ON (s.url)",
             "CREATE INDEX chunk_video_ordinal_index IF NOT EXISTS FOR (c:Chunk) ON (c.video_id, c.ordinal)",
+            "CREATE INDEX role_candidate_role_index IF NOT EXISTS FOR (r:RoleCandidate) ON (r.role)",
         ]
         with self.driver.session() as session:
             for statement in statements:
@@ -80,18 +83,30 @@ class Neo4jStore:
         episode = download.episode.model_dump(mode="json")
         segments = [segment.model_dump(mode="json") for segment in transcript.segments]
         chunk_payload = [chunk.model_dump(mode="json") for chunk in chunks]
+        role_candidates = [
+            candidate.model_dump(mode="json")
+            for candidate in extract_role_candidates(download, transcript)
+        ]
 
         with self.driver.session() as session:
             session.execute_write(self._merge_source_episode, source, episode)
             session.execute_write(self._clear_episode_transcript, episode["video_id"])
+            session.execute_write(self._clear_episode_role_candidates, episode["video_id"])
             session.execute_write(self._merge_segments, episode["video_id"], segments)
             session.execute_write(self._merge_chunks, episode["video_id"], chunk_payload)
+            session.execute_write(self._merge_role_candidates, episode["video_id"], role_candidates)
 
     def upsert_episode_metadata(self, download: DownloadResult) -> None:
         source = download.source.model_dump(mode="json")
         episode = download.episode.model_dump(mode="json")
+        role_candidates = [
+            candidate.model_dump(mode="json")
+            for candidate in extract_role_candidates(download, transcript=None)
+        ]
         with self.driver.session() as session:
             session.execute_write(self._merge_source_episode, source, episode)
+            session.execute_write(self._clear_episode_role_candidates, episode["video_id"])
+            session.execute_write(self._merge_role_candidates, episode["video_id"], role_candidates)
 
     @staticmethod
     def _merge_source_episode(tx, source: dict, episode: dict) -> None:
@@ -110,6 +125,7 @@ class Neo4jStore:
                 e.uploader_id = $episode.uploader_id,
                 e.uploader_url = $episode.uploader_url,
                 e.creator = $episode.creator,
+                e.description = $episode.description,
                 e.source_url = $episode.source_url,
                 e.duration = $episode.duration,
                 e.upload_date = $episode.upload_date,
@@ -137,6 +153,16 @@ class Neo4jStore:
             """
             MATCH (e:Episode {video_id: $video_id})-[:HAS_SEGMENT]->(ts:TranscriptSegment)
             DETACH DELETE ts
+            """,
+            video_id=video_id,
+        )
+
+    @staticmethod
+    def _clear_episode_role_candidates(tx, video_id: str) -> None:
+        tx.run(
+            """
+            MATCH (e:Episode {video_id: $video_id})-[:HAS_ROLE_CANDIDATE]->(r:RoleCandidate)
+            DETACH DELETE r
             """,
             video_id=video_id,
         )
@@ -185,6 +211,30 @@ class Neo4jStore:
             chunks=chunks,
         )
 
+    @staticmethod
+    def _merge_role_candidates(tx, video_id: str, candidates: list[dict]) -> None:
+        tx.run(
+            """
+            MATCH (e:Episode {video_id: $video_id})
+            UNWIND $candidates AS candidate
+            MERGE (p:Person {name: candidate.name})
+            SET p.updated_at = datetime()
+            MERGE (r:RoleCandidate {
+                episode_video_id: $video_id,
+                name: candidate.name,
+                role: candidate.role,
+                evidence_source: candidate.evidence_source
+            })
+            SET r.confidence = candidate.confidence,
+                r.evidence_text = candidate.evidence_text,
+                r.updated_at = datetime()
+            MERGE (e)-[:HAS_ROLE_CANDIDATE]->(r)
+            MERGE (r)-[:REFERS_TO]->(p)
+            """,
+            video_id=video_id,
+            candidates=candidates,
+        )
+
     def vector_search(
         self,
         question_embedding: list[float],
@@ -202,12 +252,25 @@ class Neo4jStore:
                     YIELD node, score
                     MATCH (e:Episode)-[:HAS_CHUNK]->(node)
                     MATCH (s:Source)-[:HAS_EPISODE]->(e)
+                    CALL {
+                        WITH e
+                        OPTIONAL MATCH (e)-[:HAS_ROLE_CANDIDATE]->(role:RoleCandidate)-[:REFERS_TO]->(person:Person)
+                        WITH collect(CASE WHEN role IS NULL THEN NULL ELSE {
+                            name: person.name,
+                            role: role.role,
+                            confidence: role.confidence,
+                            evidence_source: role.evidence_source,
+                            evidence_text: role.evidence_text
+                        } END) AS raw_role_candidates
+                        RETURN [candidate IN raw_role_candidates WHERE candidate.name IS NOT NULL] AS episode_role_candidates
+                    }
                     RETURN node.chunk_id AS chunk_id,
                            node.video_id AS video_id,
                            e.title AS episode_title,
                            e.channel AS episode_channel,
                            e.uploader AS episode_uploader,
                            e.creator AS episode_creator,
+                           episode_role_candidates AS episode_role_candidates,
                            s.url AS source_url,
                            node.text AS text,
                            node.start_time AS start_time,
@@ -233,6 +296,7 @@ class Neo4jStore:
                 episode_channel=record.get("episode_channel"),
                 episode_uploader=record.get("episode_uploader"),
                 episode_creator=record.get("episode_creator"),
+                episode_role_candidates=_role_candidates_from_record(record),
                 source_url=record["source_url"],
                 text=record["text"],
                 start_time=float(record["start_time"]),
@@ -255,12 +319,25 @@ class Neo4jStore:
             MATCH (e:Episode {video_id: $video_id})-[:HAS_CHUNK]->(node:Chunk)
             MATCH (s:Source)-[:HAS_EPISODE]->(e)
             WITH e, s, node, vector.similarity.cosine(node.embedding, $embedding) AS score
+            CALL {
+                WITH e
+                OPTIONAL MATCH (e)-[:HAS_ROLE_CANDIDATE]->(role:RoleCandidate)-[:REFERS_TO]->(person:Person)
+                WITH collect(CASE WHEN role IS NULL THEN NULL ELSE {
+                    name: person.name,
+                    role: role.role,
+                    confidence: role.confidence,
+                    evidence_source: role.evidence_source,
+                    evidence_text: role.evidence_text
+                } END) AS raw_role_candidates
+                RETURN [candidate IN raw_role_candidates WHERE candidate.name IS NOT NULL] AS episode_role_candidates
+            }
             RETURN node.chunk_id AS chunk_id,
                    node.video_id AS video_id,
                    e.title AS episode_title,
                    e.channel AS episode_channel,
                    e.uploader AS episode_uploader,
                    e.creator AS episode_creator,
+                   episode_role_candidates AS episode_role_candidates,
                    s.url AS source_url,
                    node.text AS text,
                    node.start_time AS start_time,
@@ -284,12 +361,25 @@ class Neo4jStore:
                 MATCH (e:Episode {video_id: $video_id})-[:HAS_CHUNK]->(c:Chunk)
                 MATCH (s:Source)-[:HAS_EPISODE]->(e)
                 WHERE c.ordinal >= $start AND c.ordinal <= $end
+                CALL {
+                    WITH e
+                    OPTIONAL MATCH (e)-[:HAS_ROLE_CANDIDATE]->(role:RoleCandidate)-[:REFERS_TO]->(person:Person)
+                    WITH collect(CASE WHEN role IS NULL THEN NULL ELSE {
+                        name: person.name,
+                        role: role.role,
+                        confidence: role.confidence,
+                        evidence_source: role.evidence_source,
+                        evidence_text: role.evidence_text
+                    } END) AS raw_role_candidates
+                    RETURN [candidate IN raw_role_candidates WHERE candidate.name IS NOT NULL] AS episode_role_candidates
+                }
                 RETURN c.chunk_id AS chunk_id,
                        c.video_id AS video_id,
                        e.title AS episode_title,
                        e.channel AS episode_channel,
                        e.uploader AS episode_uploader,
                        e.creator AS episode_creator,
+                       episode_role_candidates AS episode_role_candidates,
                        s.url AS source_url,
                        c.text AS text,
                        c.start_time AS start_time,
@@ -321,6 +411,7 @@ class Neo4jStore:
                        e.uploader_id AS uploader_id,
                        e.uploader_url AS uploader_url,
                        e.creator AS creator,
+                       e.description AS description,
                        e.duration AS duration,
                        e.source_url AS source_url,
                        e.transcript_source AS transcript_source,
@@ -336,9 +427,30 @@ class Neo4jStore:
             record = session.run(
                 """
                 MATCH (e:Episode {video_id: $video_id})
-                OPTIONAL MATCH (e)-[:HAS_SEGMENT]->(ts:TranscriptSegment)
-                WITH e, count(ts) AS segment_count
-                OPTIONAL MATCH (e)-[:HAS_CHUNK]->(c:Chunk)
+                CALL {
+                    WITH e
+                    OPTIONAL MATCH (e)-[:HAS_SEGMENT]->(ts:TranscriptSegment)
+                    RETURN count(ts) AS segment_count
+                }
+                CALL {
+                    WITH e
+                    OPTIONAL MATCH (e)-[:HAS_CHUNK]->(c:Chunk)
+                    RETURN count(c) AS chunk_count,
+                           min(c.start_time) AS first_chunk_start,
+                           max(c.end_time) AS last_chunk_end
+                }
+                CALL {
+                    WITH e
+                    OPTIONAL MATCH (e)-[:HAS_ROLE_CANDIDATE]->(role:RoleCandidate)-[:REFERS_TO]->(person:Person)
+                    WITH collect(CASE WHEN role IS NULL THEN NULL ELSE {
+                        name: person.name,
+                        role: role.role,
+                        confidence: role.confidence,
+                        evidence_source: role.evidence_source,
+                        evidence_text: role.evidence_text
+                    } END) AS raw_role_candidates
+                    RETURN [candidate IN raw_role_candidates WHERE candidate.name IS NOT NULL] AS role_candidates
+                }
                 RETURN e.video_id AS video_id,
                        e.title AS title,
                        e.channel AS channel,
@@ -348,6 +460,7 @@ class Neo4jStore:
                        e.uploader_id AS uploader_id,
                        e.uploader_url AS uploader_url,
                        e.creator AS creator,
+                       e.description AS description,
                        e.duration AS duration,
                        e.upload_date AS upload_date,
                        e.source_url AS source_url,
@@ -355,10 +468,11 @@ class Neo4jStore:
                        e.info_json_path AS info_json_path,
                        e.transcript_source AS transcript_source,
                        e.transcript_status AS transcript_status,
+                       role_candidates AS role_candidates,
                        segment_count AS segment_count,
-                       count(c) AS chunk_count,
-                       min(c.start_time) AS first_chunk_start,
-                       max(c.end_time) AS last_chunk_end
+                       chunk_count AS chunk_count,
+                       first_chunk_start AS first_chunk_start,
+                       last_chunk_end AS last_chunk_end
                 """,
                 video_id=video_id,
             ).single()
@@ -375,7 +489,8 @@ class Neo4jStore:
             query = """
             MATCH (s:Source)-[:HAS_EPISODE]->(e:Episode {video_id: $video_id})
             OPTIONAL MATCH (e)-[:HAS_CHUNK]->(c:Chunk)
-            RETURN s, e, c
+            OPTIONAL MATCH (e)-[:HAS_ROLE_CANDIDATE]->(r:RoleCandidate)-[:REFERS_TO]->(p:Person)
+            RETURN s, e, c, r, p
             ORDER BY c.ordinal ASC
             LIMIT $limit
             """
@@ -384,7 +499,8 @@ class Neo4jStore:
             query = """
             MATCH (s:Source)-[:HAS_EPISODE]->(e:Episode)
             OPTIONAL MATCH (e)-[:HAS_CHUNK]->(c:Chunk)
-            RETURN s, e, c
+            OPTIONAL MATCH (e)-[:HAS_ROLE_CANDIDATE]->(r:RoleCandidate)-[:REFERS_TO]->(p:Person)
+            RETURN s, e, c, r, p
             ORDER BY e.updated_at DESC, c.ordinal ASC
             LIMIT $limit
             """
@@ -397,6 +513,8 @@ class Neo4jStore:
                 source = record.get("s")
                 episode = record.get("e")
                 chunk = record.get("c")
+                role = record.get("r")
+                person = record.get("p")
                 if source:
                     source_id = f"Source:{source.get('id')}"
                     nodes[source_id] = {
@@ -438,6 +556,38 @@ class Neo4jStore:
                             "target": chunk_id,
                             "type": "HAS_CHUNK",
                         }
+                if role:
+                    role_id = (
+                        f"RoleCandidate:{role.get('episode_video_id')}:"
+                        f"{role.get('role')}:{role.get('name')}:"
+                        f"{role.get('evidence_source')}"
+                    )
+                    nodes[role_id] = {
+                        "id": role_id,
+                        "label": "RoleCandidate",
+                        "title": f"{role.get('role')}: {role.get('name')}",
+                        "properties": dict(role),
+                    }
+                    if episode:
+                        links[(episode_id, role_id, "HAS_ROLE_CANDIDATE")] = {
+                            "source": episode_id,
+                            "target": role_id,
+                            "type": "HAS_ROLE_CANDIDATE",
+                        }
+                if person:
+                    person_id = f"Person:{person.get('name')}"
+                    nodes[person_id] = {
+                        "id": person_id,
+                        "label": "Person",
+                        "title": person.get("name"),
+                        "properties": dict(person),
+                    }
+                    if role:
+                        links[(role_id, person_id, "REFERS_TO")] = {
+                            "source": role_id,
+                            "target": person_id,
+                            "type": "REFERS_TO",
+                        }
 
         return {"nodes": list(nodes.values()), "links": list(links.values())}
 
@@ -452,3 +602,12 @@ def _dedupe_records(records: Iterable[dict]) -> list[dict]:
         seen.add(chunk_id)
         output.append(record)
     return output
+
+
+def _role_candidates_from_record(record: dict) -> list[RoleCandidate]:
+    candidates: list[RoleCandidate] = []
+    for item in record.get("episode_role_candidates") or []:
+        if not item or not item.get("name"):
+            continue
+        candidates.append(RoleCandidate.model_validate(item))
+    return candidates
