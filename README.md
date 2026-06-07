@@ -19,6 +19,7 @@ This project does not support bypassing DRM, paywalls, private videos, login-onl
 - Download caching with `yt-dlp` archive support.
 - 16 kHz mono WAV extraction with FFmpeg.
 - YouTube captions first when available, with local transcription as the quality pass.
+- Detached local transcription and caption/local merge jobs after the fast caption pass.
 - Local transcription with `whisper.cpp` Metal preferred on Mac, with `faster-whisper` fallback.
 - Timestamp-preserving transcript chunks.
 - Local embeddings through Ollama.
@@ -133,6 +134,7 @@ The website supports:
 - Single-video ingestion.
 - Channel preview and long-form channel ingestion.
 - Transcript RAG questions.
+- Episode-scoped questions so answers can be limited to one selected video.
 - Episode browsing.
 - Neo4j graph visualization.
 - Graph reset.
@@ -156,6 +158,7 @@ AUDIO_OUTPUT_DIR=data/audio
 TRANSCRIPT_OUTPUT_DIR=data/transcripts
 CHUNK_OUTPUT_DIR=data/chunks
 EMBEDDING_CACHE_DIR=data/embeddings
+JOB_OUTPUT_DIR=data/jobs
 MODEL_CACHE_DIR=data/models
 CHUNK_SIZE=900
 CHUNK_OVERLAP=200
@@ -249,7 +252,7 @@ WHISPER_CPP_BINARY=whisper-cli
 WHISPER_CPP_MODEL=data/models/whisper.cpp/ggml-base.bin
 ```
 
-With this setup, Resonance Graph ingests YouTube captions first when available, then runs local Whisper in the background pass and merges the local transcript with captions.
+With this setup, Resonance Graph ingests YouTube captions first when available, then queues a detached local Whisper job. The caption transcript becomes searchable quickly as `caption_ready`; when the local pass finishes, the worker merges local Whisper with captions, re-chunks, re-embeds, updates Neo4j, and marks the episode `merged_ready`.
 
 Fallback backend:
 
@@ -274,6 +277,8 @@ WHISPER_CPP_BINARY=whisper-cli
 WHISPER_CPP_MODEL=/absolute/path/to/ggml-model.bin
 ```
 
+For the preferred Mac path, compile/install `whisper.cpp` with Metal enabled, keep `LOCAL_TRANSCRIPTION_BACKEND=whisper_cpp_metal`, and point `WHISPER_CPP_MODEL` at the base GGUF/bin model. If that binary or model is unavailable, the app can still use the configured `faster-whisper` fallback.
+
 ## CLI Commands
 
 Check local services and tools:
@@ -293,6 +298,8 @@ Ingest an approved video:
 ```bash
 resonance ingest-url "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
+
+If YouTube captions are available, this returns after the caption graph is searchable and prints a background job id for the local Whisper merge.
 
 Preview long-form videos from an approved channel:
 
@@ -318,10 +325,23 @@ Ask a question:
 resonance ask "What is this video about?"
 ```
 
+Ask against one specific episode to avoid mixing videos:
+
+```bash
+resonance ask "What is this video about?" --video-id VIDEO_ID
+```
+
 Show retrieved context with the answer:
 
 ```bash
 resonance ask "What is this video about?" --show-context
+```
+
+Check detached local transcription/merge jobs:
+
+```bash
+resonance background-jobs
+resonance background-jobs --job-id JOB_ID
 ```
 
 Run a benchmark suite:

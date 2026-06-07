@@ -43,13 +43,18 @@ Resonance Graph is built as a modular local pipeline. The MVP focuses on transcr
 
 8. `retrieval.py`
    - Embeds questions.
-   - Retrieves relevant chunks from Neo4j.
+   - Retrieves relevant chunks from Neo4j, optionally scoped to one episode.
    - Formats retrieved context.
    - Generates transcript-grounded answers.
 
 9. `web.py` and `app/static/`
    - Provide the local website and JSON endpoints.
    - Reuse the same pipeline modules as the CLI.
+
+10. `background_jobs.py` and `worker.py`
+   - Store detached local transcription job state as JSON under `data/jobs`.
+   - Run local Whisper, transcript merge, re-chunking, re-embedding, and Neo4j updates after caption-ready ingest returns.
+   - Preserve resumability through cached media, audio, captions, local transcripts, chunks, and embeddings.
 
 ## Graph Model
 
@@ -67,6 +72,7 @@ The pipeline is designed to resume:
 
 - Downloads are protected by a `yt-dlp` archive.
 - Audio, transcripts, chunks, and embeddings are cached on disk.
+- Detached local transcription jobs are cached under `data/jobs`.
 - Neo4j writes use `MERGE`.
 - Constraints prevent duplicate graph entities.
 

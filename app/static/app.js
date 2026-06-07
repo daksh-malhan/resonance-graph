@@ -32,6 +32,7 @@ async function refreshStatus() {
     .map((check) => `
       <div class="status-pill ${check.ok ? "ok" : "fail"}">
         <strong>${check.ok ? "OK" : "FAIL"}</strong> ${check.label}
+        <span>${check.message || ""}</span>
       </div>
     `)
     .join("");
@@ -60,6 +61,27 @@ async function pollJob(jobId) {
       await refreshGraph();
     }
     window.setTimeout(() => pollJob(jobId), 3000);
+    return;
+  }
+  if (job.error) write(job.error);
+  if (job.result) write(JSON.stringify(job.result, null, 2));
+  if (job.result?.local_transcription_job_id) {
+    pollBackgroundJob(job.result.local_transcription_job_id);
+  }
+  await refreshEpisodes();
+  await refreshGraph();
+}
+
+async function pollBackgroundJob(jobId) {
+  const data = await api(`/api/background-jobs/${jobId}`);
+  const job = data.job;
+  write(`local merge: ${job.state} - ${job.message}`);
+  if (job.state === "queued" || job.state === "running") {
+    if (["writing_graph", "complete", "embedding_chunks", "merging_transcripts"].includes(job.stage)) {
+      await refreshEpisodes();
+      await refreshGraph();
+    }
+    window.setTimeout(() => pollBackgroundJob(jobId), 5000);
     return;
   }
   if (job.error) write(job.error);
@@ -99,6 +121,7 @@ async function askQuestion() {
       question,
       top_k: numberOrNull($("topK").value),
       neighbors: numberOrNull($("neighbors").value),
+      video_id: $("askEpisode").value || null,
     })
   );
   write(data.answer);
@@ -108,8 +131,10 @@ async function refreshEpisodes() {
   const data = await api("/api/episodes");
   const list = $("episodeList");
   const selector = $("graphEpisode");
+  const askSelector = $("askEpisode");
   list.innerHTML = "";
   selector.innerHTML = '<option value="">All episodes</option>';
+  askSelector.innerHTML = '<option value="">All episodes</option>';
   for (const episode of data.episodes) {
     const item = document.createElement("div");
     item.className = "episode";
@@ -121,6 +146,7 @@ async function refreshEpisodes() {
     item.onclick = () => {
       selectedVideoId = episode.video_id;
       selector.value = episode.video_id;
+      askSelector.value = episode.video_id;
       refreshGraph();
       inspectEpisode(episode.video_id);
     };
@@ -130,6 +156,15 @@ async function refreshEpisodes() {
     option.value = episode.video_id;
     option.textContent = episode.title;
     selector.appendChild(option);
+
+    const askOption = document.createElement("option");
+    askOption.value = episode.video_id;
+    askOption.textContent = episode.title;
+    askSelector.appendChild(askOption);
+  }
+  if (selectedVideoId) {
+    selector.value = selectedVideoId;
+    askSelector.value = selectedVideoId;
   }
 }
 
@@ -311,6 +346,12 @@ function bind() {
   $("refreshGraph").onclick = refreshGraph;
   $("graphEpisode").onchange = () => {
     selectedVideoId = $("graphEpisode").value;
+    $("askEpisode").value = selectedVideoId;
+    refreshGraph();
+  };
+  $("askEpisode").onchange = () => {
+    selectedVideoId = $("askEpisode").value;
+    $("graphEpisode").value = selectedVideoId;
     refreshGraph();
   };
   $("graphLimit").onchange = refreshGraph;

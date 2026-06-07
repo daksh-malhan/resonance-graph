@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import subprocess
+import importlib.util
 from pathlib import Path
 
 from app.config import AppConfig
@@ -101,6 +102,29 @@ def preserve_primary_local_transcript(video_id: str, config: AppConfig) -> Trans
     ]
     write_json(local_path, primary)
     return primary
+
+
+def local_transcription_backend_status(config: AppConfig) -> str:
+    backend = _local_backend(config)
+    if backend == "faster-whisper":
+        if importlib.util.find_spec("faster_whisper") is None:
+            raise AppError("faster-whisper is not installed.")
+        return "faster-whisper ready"
+
+    if backend in {"whisper.cpp", "whisper-cpp", "whisper_cpp"}:
+        try:
+            require_executable(config.whisper_cpp_binary, "Install whisper.cpp.")
+            if not config.whisper_cpp_model:
+                raise AppError("WHISPER_CPP_MODEL is not configured.")
+            if not config.whisper_cpp_model.exists():
+                raise AppError(f"WHISPER_CPP_MODEL does not exist: {config.whisper_cpp_model}")
+        except AppError as exc:
+            if importlib.util.find_spec("faster_whisper") is not None:
+                return f"whisper.cpp/Metal unavailable ({exc}); faster-whisper fallback ready"
+            raise
+        return "whisper.cpp/Metal preferred backend ready"
+
+    raise AppError("Unsupported transcription backend.")
 
 
 def merge_transcripts(

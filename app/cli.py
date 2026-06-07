@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import logging
 from pathlib import Path
 from typing import Annotated
@@ -8,6 +7,7 @@ from typing import Annotated
 import typer
 
 from app.benchmark import load_benchmark_suite, run_benchmark, write_report
+from app.background_jobs import list_jobs, read_job
 from app.config import AppConfig, load_config
 from app.errors import AppError
 from app.neo4j_store import Neo4jStore
@@ -15,6 +15,7 @@ from app.ollama import OllamaClient
 from app.pipeline import ingest_url_pipeline
 from app.prompts import format_retrieval_context
 from app.retrieval import answer_question, retrieve_context
+from app.transcription import local_transcription_backend_status
 from app.utils import configure_logging, format_timestamp, require_executable
 from app.youtube import discover_channel_videos
 
@@ -78,10 +79,21 @@ def ingest_url(
     """Download an approved YouTube video, transcribe it locally, and ingest it into Neo4j."""
     try:
         config = _config(verbose)
-        download, chunks = ingest_url_pipeline(url, config, force=force)
+        download, chunks = ingest_url_pipeline(
+            url,
+            config,
+            force=force,
+            background_local=True,
+        )
         typer.echo(f"Ingested: {download.episode.title}")
         typer.echo(f"Video ID: {download.episode.video_id}")
         typer.echo(f"Chunks: {len(chunks)}")
+        typer.echo(f"Transcript status: {download.episode.transcript_status or 'unknown'}")
+        if download.episode.local_transcription_job_id:
+            typer.echo(
+                "Local transcription/merge is running in the background. "
+                f"Job ID: {download.episode.local_transcription_job_id}"
+            )
         typer.echo(f"Source: {download.episode.source_url}")
     except Exception as exc:
         _fail(exc)
@@ -158,7 +170,12 @@ def ingest_channel(
         for index, video in enumerate(videos, start=1):
             typer.echo(f"\n[{index}/{len(videos)}] Ingesting: {video.title}")
             try:
-                download, chunks = ingest_url_pipeline(video.url, config, force=force)
+                download, chunks = ingest_url_pipeline(
+                    video.url,
+                    config,
+                    force=force,
+                    background_local=True,
+                )
             except Exception as exc:
                 failed += 1
                 typer.secho(f"Failed: {video.title}\n{exc}", fg=typer.colors.RED, err=True)
@@ -190,6 +207,10 @@ def ask(
         bool,
         typer.Option("--show-context", help="Print retrieved context after the answer."),
     ] = False,
+    video_id: Annotated[
+        str | None,
+        typer.Option("--video-id", help="Restrict retrieval to one ingested YouTube video id."),
+    ] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed logs.")] = False,
 ) -> None:
     """Ask a question using Neo4j vector search and a local Ollama chat model."""
@@ -199,7 +220,15 @@ def ask(
         ollama.ensure_models()
         store = Neo4jStore(config)
         try:
-            result = answer_question(question, store, ollama, config, top_k, neighbors)
+            result = answer_question(
+                question,
+                store,
+                ollama,
+                config,
+                top_k,
+                neighbors,
+                video_id=video_id,
+            )
         finally:
             store.close()
         typer.echo(result.answer)
@@ -218,6 +247,10 @@ def retrieve(
         int,
         typer.Option("--neighbors", help="Include N adjacent chunks around each retrieved chunk."),
     ] = 1,
+    video_id: Annotated[
+        str | None,
+        typer.Option("--video-id", help="Restrict retrieval to one ingested YouTube video id."),
+    ] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed logs.")] = False,
 ) -> None:
     """Print retrieved transcript chunks without generating an answer."""
@@ -226,7 +259,15 @@ def retrieve(
         ollama = OllamaClient(config)
         store = Neo4jStore(config)
         try:
-            chunks = retrieve_context(question, store, ollama, config, top_k, neighbors)
+            chunks = retrieve_context(
+                question,
+                store,
+                ollama,
+                config,
+                top_k,
+                neighbors,
+                video_id=video_id,
+            )
         finally:
             store.close()
         typer.echo(format_retrieval_context(chunks))
@@ -348,6 +389,40 @@ def inspect_episode(
         _fail(exc)
 
 
+@cli_app.command("background-jobs")
+def background_jobs(
+    job_id: Annotated[
+        str | None,
+        typer.Option("--job-id", help="Show one background local transcription job."),
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Maximum recent jobs to show.")] = 10,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed logs.")] = False,
+) -> None:
+    """Show detached local transcription and transcript-merge jobs."""
+    try:
+        config = _config(verbose)
+        if job_id:
+            job = read_job(job_id, config)
+            if not job:
+                typer.echo(f"No background job found for id: {job_id}")
+                return
+            for key, value in job.items():
+                typer.echo(f"{key}: {value}")
+            return
+
+        jobs = list_jobs(config, limit=limit)
+        if not jobs:
+            typer.echo("No background jobs yet.")
+            return
+        for job in jobs:
+            typer.echo(
+                f"{job['id']} | {job.get('video_id')} | {job.get('state')} | "
+                f"{job.get('stage')} | {job.get('message')}"
+            )
+    except Exception as exc:
+        _fail(exc)
+
+
 @cli_app.command("reset-db")
 def reset_db(
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Confirm deletion without prompting.")] = False,
@@ -379,41 +454,21 @@ def status(
     checks = [
         ("yt-dlp executable", lambda: require_executable("yt-dlp", "Install yt-dlp.")),
         ("FFmpeg executable", lambda: require_executable("ffmpeg", "Install FFmpeg.")),
-        ("transcription backend", lambda: _check_transcription_backend(config)),
+        ("transcription backend", lambda: local_transcription_backend_status(config)),
         ("Ollama service/models", lambda: OllamaClient(config).ensure_models()),
         ("Neo4j service", lambda: _check_neo4j(config)),
     ]
     failed = False
     for label, check in checks:
         try:
-            check()
-            typer.secho(f"OK   {label}", fg=typer.colors.GREEN)
+            message = check()
+            suffix = f": {message}" if message else ""
+            typer.secho(f"OK   {label}{suffix}", fg=typer.colors.GREEN)
         except Exception as exc:
             failed = True
             typer.secho(f"FAIL {label}: {exc}", fg=typer.colors.RED)
     if failed:
         raise typer.Exit(code=1)
-
-
-def _check_transcription_backend(config: AppConfig) -> None:
-    backend = (config.local_transcription_backend or config.transcription_backend).lower().strip()
-    if backend == "whisper_cpp_metal":
-        backend = "whisper.cpp"
-    if backend == "faster-whisper":
-        if importlib.util.find_spec("faster_whisper") is None:
-            raise AppError("faster-whisper is not installed.")
-    elif backend in {"whisper.cpp", "whisper-cpp", "whisper_cpp"}:
-        try:
-            require_executable(config.whisper_cpp_binary, "Install whisper.cpp.")
-            if not config.whisper_cpp_model:
-                raise AppError("WHISPER_CPP_MODEL is not configured.")
-            if not config.whisper_cpp_model.exists():
-                raise AppError(f"WHISPER_CPP_MODEL does not exist: {config.whisper_cpp_model}")
-        except AppError:
-            if importlib.util.find_spec("faster_whisper") is None:
-                raise
-    else:
-        raise AppError("Unsupported transcription backend.")
 
 
 def _check_neo4j(config: AppConfig) -> None:

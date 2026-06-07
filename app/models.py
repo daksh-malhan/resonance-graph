@@ -22,6 +22,7 @@ class EpisodeMetadata(BaseModel):
     info_json_path: Path | None = None
     transcript_source: str | None = None
     transcript_status: str | None = None
+    local_transcription_job_id: str | None = None
 
 
 class DownloadResult(BaseModel):

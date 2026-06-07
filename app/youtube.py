@@ -141,6 +141,15 @@ def download_youtube_video(url: str, config: AppConfig, force: bool = False) -> 
     return result
 
 
+def load_download_result(video_id: str, config: AppConfig) -> DownloadResult:
+    metadata_path = config.youtube_download_dir / video_id / "metadata.json"
+    if not metadata_path.exists():
+        raise AppError(
+            f"No cached download metadata found for {video_id}. Ingest the video first."
+        )
+    return DownloadResult.model_validate_json(metadata_path.read_text())
+
+
 def discover_channel_videos(
     channel_url: str,
     config: AppConfig,

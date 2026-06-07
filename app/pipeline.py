@@ -4,7 +4,8 @@ import logging
 from collections.abc import Callable
 
 from app.audio import extract_audio
-from app.captions import extract_youtube_caption_transcript
+from app.background_jobs import enqueue_local_finalization
+from app.captions import extract_youtube_caption_transcript, youtube_transcript_path_for
 from app.chunking import chunk_transcript
 from app.config import AppConfig
 from app.models import DownloadResult, Transcript, TranscriptChunk
@@ -16,7 +17,8 @@ from app.transcription import (
     transcribe_audio,
     write_primary_transcript,
 )
-from app.youtube import download_youtube_video
+from app.utils import read_model
+from app.youtube import download_youtube_video, load_download_result
 
 logger = logging.getLogger(__name__)
 StageCallback = Callable[[str, str], None]
@@ -27,6 +29,7 @@ def ingest_url_pipeline(
     config: AppConfig,
     force: bool = False,
     stage_callback: StageCallback | None = None,
+    background_local: bool = False,
 ) -> tuple[DownloadResult, list[TranscriptChunk]]:
     config.ensure_directories()
     _stage(stage_callback, "downloading", "Downloading video and metadata")
@@ -61,6 +64,53 @@ def ingest_url_pipeline(
         _stage(stage_callback, "complete", "Caption transcript ingested")
         return final_download, final_chunks
 
+    if caption_transcript and background_local:
+        job_id = enqueue_local_finalization(download.episode.video_id, config, force=force)
+        _stage(
+            stage_callback,
+            "local_transcription_queued",
+            f"Queued local transcription job {job_id}",
+        )
+        final_download = final_download.model_copy(
+            update={
+                "episode": final_download.episode.model_copy(
+                    update={"local_transcription_job_id": job_id}
+                )
+            }
+        )
+        return final_download, final_chunks
+
+    final_download, final_chunks = finalize_local_transcript_pipeline(
+        download.episode.video_id,
+        config,
+        force=force,
+        stage_callback=stage_callback,
+        download=download,
+        caption_transcript=caption_transcript,
+    )
+    return final_download, final_chunks
+
+
+def finalize_local_transcript_pipeline(
+    video_id: str,
+    config: AppConfig,
+    force: bool = False,
+    stage_callback: StageCallback | None = None,
+    download: DownloadResult | None = None,
+    caption_transcript: Transcript | None = None,
+    strict_local_failure: bool = False,
+) -> tuple[DownloadResult, list[TranscriptChunk]]:
+    config.ensure_directories()
+    download = download or load_download_result(video_id, config)
+
+    if caption_transcript is None:
+        caption_path = youtube_transcript_path_for(video_id, config)
+        if caption_path.exists():
+            caption_transcript = read_model(caption_path, Transcript)
+
+    _stage(stage_callback, "extracting_audio", "Checking normalized audio")
+    audio_path = extract_audio(download.episode, config, force=False)
+
     _stage(stage_callback, "local_transcribing", "Running local Whisper transcription")
     try:
         local_transcript = transcribe_audio(
@@ -70,6 +120,8 @@ def ingest_url_pipeline(
             force=force,
         )
     except Exception:
+        if strict_local_failure:
+            raise
         if caption_transcript:
             logger.exception("Local transcription failed; keeping caption transcript")
             _stage(
@@ -77,7 +129,17 @@ def ingest_url_pipeline(
                 "complete",
                 "Caption transcript kept because local transcription failed",
             )
-            return final_download, final_chunks
+            fallback_download = download.model_copy(
+                update={
+                    "episode": download.episode.model_copy(
+                        update={
+                            "transcript_source": "youtube_caption",
+                            "transcript_status": "caption_ready",
+                        }
+                    )
+                }
+            )
+            return fallback_download, []
         raise
 
     if caption_transcript:

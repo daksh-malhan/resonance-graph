@@ -43,6 +43,7 @@ class AppConfig(BaseSettings):
     transcript_output_dir: Path = Path("data/transcripts")
     chunk_output_dir: Path = Path("data/chunks")
     embedding_cache_dir: Path = Path("data/embeddings")
+    job_output_dir: Path = Path("data/jobs")
     model_cache_dir: Path = Path("data/models")
 
     chunk_size: int = 900
@@ -73,6 +74,7 @@ class AppConfig(BaseSettings):
         "transcript_output_dir",
         "chunk_output_dir",
         "embedding_cache_dir",
+        "job_output_dir",
         "model_cache_dir",
         "whisper_cpp_model",
         mode="before",
@@ -116,6 +118,7 @@ class AppConfig(BaseSettings):
             self.transcript_output_dir,
             self.chunk_output_dir,
             self.embedding_cache_dir,
+            self.job_output_dir,
             self.model_cache_dir,
         ]:
             directory.mkdir(parents=True, exist_ok=True)

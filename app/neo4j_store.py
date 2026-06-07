@@ -178,30 +178,34 @@ class Neo4jStore:
         question_embedding: list[float],
         top_k: int,
         neighbor_window: int = 0,
+        video_id: str | None = None,
     ) -> list[RetrievedChunk]:
         with self.driver.session() as session:
-            records = session.run(
-                """
-                CALL db.index.vector.queryNodes($index_name, $top_k, $embedding)
-                YIELD node, score
-                MATCH (e:Episode)-[:HAS_CHUNK]->(node)
-                MATCH (s:Source)-[:HAS_EPISODE]->(e)
-                RETURN node.chunk_id AS chunk_id,
-                       node.video_id AS video_id,
-                       e.title AS episode_title,
-                       s.url AS source_url,
-                       node.text AS text,
-                       node.start_time AS start_time,
-                       node.end_time AS end_time,
-                       score AS score,
-                       node.ordinal AS ordinal,
-                       node.transcript_source AS transcript_source
-                ORDER BY score DESC
-                """,
-                index_name=self.config.vector_index_name,
-                top_k=top_k,
-                embedding=question_embedding,
-            ).data()
+            if video_id:
+                records = self._vector_search_episode(session, question_embedding, top_k, video_id)
+            else:
+                records = session.run(
+                    """
+                    CALL db.index.vector.queryNodes($index_name, $top_k, $embedding)
+                    YIELD node, score
+                    MATCH (e:Episode)-[:HAS_CHUNK]->(node)
+                    MATCH (s:Source)-[:HAS_EPISODE]->(e)
+                    RETURN node.chunk_id AS chunk_id,
+                           node.video_id AS video_id,
+                           e.title AS episode_title,
+                           s.url AS source_url,
+                           node.text AS text,
+                           node.start_time AS start_time,
+                           node.end_time AS end_time,
+                           score AS score,
+                           node.ordinal AS ordinal,
+                           node.transcript_source AS transcript_source
+                    ORDER BY score DESC
+                    """,
+                    index_name=self.config.vector_index_name,
+                    top_k=top_k,
+                    embedding=question_embedding,
+                ).data()
 
             if neighbor_window > 0 and records:
                 records = self._expand_neighbors(session, records, neighbor_window)
@@ -220,6 +224,36 @@ class Neo4jStore:
             )
             for record in _dedupe_records(records)
         ]
+
+    @staticmethod
+    def _vector_search_episode(
+        session,
+        question_embedding: list[float],
+        top_k: int,
+        video_id: str,
+    ) -> list[dict]:
+        return session.run(
+            """
+            MATCH (e:Episode {video_id: $video_id})-[:HAS_CHUNK]->(node:Chunk)
+            MATCH (s:Source)-[:HAS_EPISODE]->(e)
+            WITH e, s, node, vector.similarity.cosine(node.embedding, $embedding) AS score
+            RETURN node.chunk_id AS chunk_id,
+                   node.video_id AS video_id,
+                   e.title AS episode_title,
+                   s.url AS source_url,
+                   node.text AS text,
+                   node.start_time AS start_time,
+                   node.end_time AS end_time,
+                   score AS score,
+                   node.ordinal AS ordinal,
+                   node.transcript_source AS transcript_source
+            ORDER BY score DESC
+            LIMIT $top_k
+            """,
+            video_id=video_id,
+            embedding=question_embedding,
+            top_k=top_k,
+        ).data()
 
     def _expand_neighbors(self, session, records: list[dict], neighbor_window: int) -> list[dict]:
         expanded = list(records)

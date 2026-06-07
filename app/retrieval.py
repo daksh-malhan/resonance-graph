@@ -15,12 +15,14 @@ def retrieve_context(
     config: AppConfig,
     top_k: int | None = None,
     neighbor_window: int = 1,
+    video_id: str | None = None,
 ) -> list[RetrievedChunk]:
     embedding = ollama.embed_text(question)
     return store.vector_search(
         question_embedding=embedding,
         top_k=top_k or config.retrieval_top_k,
         neighbor_window=neighbor_window,
+        video_id=video_id,
     )
 
 
@@ -31,8 +33,9 @@ def answer_question(
     config: AppConfig,
     top_k: int | None = None,
     neighbor_window: int = 1,
+    video_id: str | None = None,
 ) -> RagAnswer:
-    contexts = retrieve_context(question, store, ollama, config, top_k, neighbor_window)
+    contexts = retrieve_context(question, store, ollama, config, top_k, neighbor_window, video_id)
     prompt = build_answer_prompt(question, contexts)
     answer = ollama.chat(SYSTEM_PROMPT, prompt)
     if contexts:

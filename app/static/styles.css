@@ -168,7 +168,7 @@ h2 {
 
 .status-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 22px;
 }
@@ -193,6 +193,12 @@ h2 {
 
 .status-pill.fail strong {
   color: var(--danger);
+}
+
+.status-pill span {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
 }
 
 .workspace {

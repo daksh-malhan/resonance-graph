@@ -13,12 +13,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from app.background_jobs import list_jobs, read_job
 from app.config import AppConfig, load_config
 from app.errors import AppError
 from app.neo4j_store import Neo4jStore
 from app.ollama import OllamaClient
 from app.pipeline import ingest_url_pipeline
 from app.retrieval import answer_question
+from app.transcription import local_transcription_backend_status
 from app.utils import configure_logging, require_executable
 from app.youtube import discover_channel_videos
 
@@ -115,6 +117,21 @@ class RequestHandler(BaseHTTPRequestHandler):
                     json_response(self, HTTPStatus.NOT_FOUND, {"error": "Job not found"})
                 else:
                     json_response(self, HTTPStatus.OK, {"job": job})
+            elif parsed.path == "/api/background-jobs":
+                qs = parse_qs(parsed.query)
+                limit = int((qs.get("limit") or ["25"])[0])
+                json_response(
+                    self,
+                    HTTPStatus.OK,
+                    {"jobs": list_jobs(self.state.config, limit=limit)},
+                )
+            elif parsed.path.startswith("/api/background-jobs/"):
+                job_id = parsed.path.removeprefix("/api/background-jobs/")
+                job = read_job(job_id, self.state.config)
+                if not job:
+                    json_response(self, HTTPStatus.NOT_FOUND, {"error": "Background job not found"})
+                else:
+                    json_response(self, HTTPStatus.OK, {"job": job})
             else:
                 json_response(self, HTTPStatus.NOT_FOUND, {"error": "Not found"})
         except Exception as exc:
@@ -174,12 +191,13 @@ def status_payload(config: AppConfig) -> dict[str, Any]:
     for label, check in [
         ("yt-dlp", lambda: require_executable("yt-dlp", "Install yt-dlp.")),
         ("FFmpeg", lambda: require_executable("ffmpeg", "Install FFmpeg.")),
+        ("Transcription", lambda: local_transcription_backend_status(config)),
         ("Ollama", lambda: OllamaClient(config).ensure_models()),
         ("Neo4j", lambda: _neo4j_health(config)),
     ]:
         try:
-            check()
-            checks.append({"label": label, "ok": True, "message": "OK"})
+            message = check()
+            checks.append({"label": label, "ok": True, "message": message or "OK"})
         except Exception as exc:
             checks.append({"label": label, "ok": False, "message": str(exc)})
     return {"checks": checks}
@@ -234,10 +252,19 @@ def ask_question(config: AppConfig, body: dict[str, Any]) -> dict:
         raise AppError("Question is required.")
     top_k = int(body.get("top_k") or config.retrieval_top_k)
     neighbors = int(body.get("neighbors") if body.get("neighbors") is not None else 1)
+    video_id = str(body.get("video_id") or "").strip() or None
     ollama = OllamaClient(config)
     store = Neo4jStore(config)
     try:
-        result = answer_question(question, store, ollama, config, top_k, neighbors)
+        result = answer_question(
+            question,
+            store,
+            ollama,
+            config,
+            top_k,
+            neighbors,
+            video_id=video_id,
+        )
     finally:
         store.close()
     return result.model_dump(mode="json")
@@ -280,6 +307,7 @@ def start_ingest_url_job(state: WebState, body: dict[str, Any]) -> str:
                 state.config,
                 force=force,
                 stage_callback=on_stage,
+                background_local=True,
             )
             state.jobs.update(
                 job_id,
@@ -294,6 +322,7 @@ def start_ingest_url_job(state: WebState, body: dict[str, Any]) -> str:
                     "source_url": download.episode.source_url,
                     "transcript_source": download.episode.transcript_source,
                     "transcript_status": download.episode.transcript_status,
+                    "local_transcription_job_id": download.episode.local_transcription_job_id,
                 },
             )
         except Exception as exc:
@@ -343,7 +372,12 @@ def start_ingest_channel_job(state: WebState, body: dict[str, Any]) -> str:
                     result=result,
                 )
                 try:
-                    download, chunks = ingest_url_pipeline(video.url, state.config, force=force)
+                    download, chunks = ingest_url_pipeline(
+                        video.url,
+                        state.config,
+                        force=force,
+                        background_local=True,
+                    )
                     result["succeeded"] += 1
                     result["items"].append(
                         {
@@ -351,6 +385,7 @@ def start_ingest_channel_job(state: WebState, body: dict[str, Any]) -> str:
                             "title": download.episode.title,
                             "chunks": len(chunks),
                             "transcript_status": download.episode.transcript_status,
+                            "local_transcription_job_id": download.episode.local_transcription_job_id,
                             "ok": True,
                         }
                     )
@@ -403,6 +438,7 @@ def clear_cache(config: AppConfig, include_models: bool = False) -> None:
         config.transcript_output_dir,
         config.chunk_output_dir,
         config.embedding_cache_dir,
+        config.job_output_dir,
     ]
     if include_models:
         targets.append(config.model_cache_dir)
