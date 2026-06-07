@@ -1,6 +1,11 @@
 from app.config import AppConfig
 from app.models import RetrievedChunk
-from app.retrieval import answer_question, is_corpus_overview_question, retrieve_context
+from app.retrieval import (
+    answer_question,
+    is_corpus_overview_question,
+    is_metadata_identity_question,
+    retrieve_context,
+)
 
 
 class FakeOllama:
@@ -61,6 +66,9 @@ class CorpusStore:
             },
         ]
 
+    def inspect_episode(self, video_id: str) -> dict | None:
+        return None
+
 
 class NoChatOllama:
     def embed_text(self, text: str) -> list[float]:
@@ -89,3 +97,66 @@ def test_corpus_overview_question_detection() -> None:
     assert is_corpus_overview_question("What is the data about ?")
     assert is_corpus_overview_question("summarize this dataset")
     assert not is_corpus_overview_question("What does Howard Marks say about debt?")
+
+
+class MetadataStore:
+    def vector_search(self, *args, **kwargs):
+        raise AssertionError("metadata identity questions should not run vector search")
+
+    def list_episodes(self) -> list[dict]:
+        return [
+            {
+                "title": "Martin Escobari: Trauma, Chaos & Three Industries Worth $100B | Nikhil Kamath | People by WTF",
+                "video_id": "one",
+                "channel": "Nikhil Kamath",
+                "chunk_count": 114,
+            },
+            {
+                "title": "The World Bank President On Why Jobs Fix Everything | Ajay Banga x Nikhil Kamath | People by WTF",
+                "video_id": "two",
+                "channel": "Nikhil Kamath",
+                "chunk_count": 109,
+            },
+        ]
+
+    def inspect_episode(self, video_id: str) -> dict | None:
+        return {
+            "title": "Martin Escobari: Trauma, Chaos & Three Industries Worth $100B | Nikhil Kamath | People by WTF",
+            "video_id": video_id,
+            "channel": "Nikhil Kamath",
+            "chunk_count": 114,
+        }
+
+
+def test_metadata_identity_question_uses_channel_without_llm() -> None:
+    result = answer_question(
+        "who is the host?",
+        MetadataStore(),  # type: ignore[arg-type]
+        NoChatOllama(),  # type: ignore[arg-type]
+        AppConfig(),
+    )
+
+    assert "Nikhil Kamath" in result.answer
+    assert "channel owner or publisher" in result.answer
+    assert "host/show hint" in result.answer
+    assert "Episode channel/owner: Nikhil Kamath" in result.answer
+    assert result.contexts == []
+
+
+def test_scoped_metadata_identity_question_uses_inspect_episode() -> None:
+    result = answer_question(
+        "who owns the channel?",
+        MetadataStore(),  # type: ignore[arg-type]
+        NoChatOllama(),  # type: ignore[arg-type]
+        AppConfig(),
+        video_id="one",
+    )
+
+    assert "Nikhil Kamath" in result.answer
+    assert "Martin Escobari" in result.answer
+
+
+def test_metadata_identity_question_detection() -> None:
+    assert is_metadata_identity_question("who hosts this podcast?")
+    assert is_metadata_identity_question("who owns the channel?")
+    assert not is_metadata_identity_question("what does the guest say about debt?")

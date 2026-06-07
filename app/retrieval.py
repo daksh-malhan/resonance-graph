@@ -50,6 +50,13 @@ def answer_question(
     neighbor_window: int = 1,
     video_id: str | None = None,
 ) -> RagAnswer:
+    if is_metadata_identity_question(question):
+        episodes = [store.inspect_episode(video_id)] if video_id else store.list_episodes()
+        return RagAnswer(
+            answer=build_metadata_identity_answer([episode for episode in episodes if episode]),
+            contexts=[],
+        )
+
     if video_id is None and is_corpus_overview_question(question):
         return RagAnswer(answer=build_corpus_overview_answer(store.list_episodes()), contexts=[])
 
@@ -67,14 +74,7 @@ def answer_question(
 
 
 def is_corpus_overview_question(question: str) -> bool:
-    normalized = " ".join(
-        question.lower()
-        .replace("?", " ")
-        .replace("!", " ")
-        .replace(".", " ")
-        .replace(",", " ")
-        .split()
-    )
+    normalized = _normalize_question(question)
     if normalized in CORPUS_OVERVIEW_PHRASES:
         return True
     return (
@@ -82,6 +82,77 @@ def is_corpus_overview_question(question: str) -> bool:
         and any(term in normalized for term in ["about", "summarize", "summarise", "overview"])
         and len(normalized.split()) <= 8
     )
+
+
+def is_metadata_identity_question(question: str) -> bool:
+    normalized = _normalize_question(question)
+    words = set(normalized.split())
+    identity_terms = {
+        "host",
+        "hosts",
+        "hosted",
+        "hosting",
+        "owner",
+        "owns",
+        "owned",
+        "channel",
+        "uploader",
+        "publisher",
+        "podcast",
+        "show",
+    }
+    question_terms = {"who", "whose", "which", "what", "is", "are"}
+    return bool(words & identity_terms) and bool(words & question_terms) and len(words) <= 14
+
+
+def build_metadata_identity_answer(episodes: list[dict]) -> str:
+    if not episodes:
+        return "I do not have stored episode metadata for that selection."
+
+    channels = sorted(
+        {
+            str(episode.get("channel")).strip()
+            for episode in episodes
+            if episode.get("channel") and str(episode.get("channel")).strip()
+        }
+    )
+    titles = [str(episode.get("title") or episode.get("video_id")) for episode in episodes]
+
+    if not channels:
+        return (
+            "The stored metadata does not include a channel/uploader name for that selection. "
+            "I cannot identify the channel owner or host from metadata alone."
+        )
+
+    lines: list[str] = []
+    if len(channels) == 1:
+        channel = channels[0]
+        lines.append(
+            f"The stored channel/uploader metadata identifies `{channel}` as the channel owner or publisher. "
+            f"This is also the best available host/show hint from metadata, but it should be treated as metadata inference unless the transcript or title directly confirms the host. "
+            f"(Episode channel/owner: {channel})"
+        )
+    else:
+        lines.append(
+            "The selected data has multiple channel/uploader metadata values: "
+            + ", ".join(f"`{channel}`" for channel in channels)
+            + ". Treat these as channel owner/publisher metadata, not transcript proof."
+        )
+
+    title_host_hints = [title for title in titles if any(channel in title for channel in channels)]
+    if title_host_hints:
+        lines.append("")
+        lines.append("Title metadata also supports this host/show context:")
+        for title in title_host_hints[:5]:
+            lines.append(f"- {title} (Episode title: {title})")
+
+    if len(titles) > len(title_host_hints):
+        lines.append("")
+        lines.append("Episode metadata checked:")
+        for title in titles[:5]:
+            lines.append(f"- {title}")
+
+    return "\n".join(lines)
 
 
 def build_corpus_overview_answer(episodes: list[dict]) -> str:
@@ -122,6 +193,17 @@ def build_corpus_overview_answer(episodes: list[dict]) -> str:
         "or ask a more specific question."
     )
     return "\n".join(lines)
+
+
+def _normalize_question(question: str) -> str:
+    return " ".join(
+        question.lower()
+        .replace("?", " ")
+        .replace("!", " ")
+        .replace(".", " ")
+        .replace(",", " ")
+        .split()
+    )
 
 
 def _topic_hints_from_titles(titles: list[str]) -> list[str]:
