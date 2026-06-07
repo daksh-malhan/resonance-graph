@@ -25,6 +25,10 @@ def local_transcript_path_for(video_id: str, config: AppConfig) -> Path:
     return config.transcript_output_dir / f"{video_id}.local.transcript.json"
 
 
+def whisper_cpp_json_path_for(video_id: str, config: AppConfig) -> Path:
+    return config.transcript_output_dir / f"{video_id}.whispercpp.json"
+
+
 def transcribe_audio(
     audio_path: Path,
     video_id: str,
@@ -50,6 +54,17 @@ def transcribe_audio(
             return primary
 
     backend = _local_backend(config)
+    whisper_cpp_json = whisper_cpp_json_path_for(video_id, config)
+    if backend in {"whisper.cpp", "whisper-cpp", "whisper_cpp"} and whisper_cpp_json.exists() and not force:
+        logger.info("Importing cached whisper.cpp transcript %s", whisper_cpp_json)
+        transcript = _transcript_from_whisper_cpp_json(whisper_cpp_json, video_id)
+        transcript = transcript.model_copy(update={"source": LOCAL_SOURCE})
+        transcript.segments[:] = [
+            segment.model_copy(update={"source": LOCAL_SOURCE}) for segment in transcript.segments
+        ]
+        write_json(output_path, transcript)
+        return transcript
+
     if backend == "faster-whisper":
         transcript = _transcribe_with_faster_whisper(audio_path, video_id, config)
     elif backend in {"whisper.cpp", "whisper-cpp", "whisper_cpp"}:
@@ -241,8 +256,17 @@ def _transcribe_with_whisper_cpp(
     if result.returncode != 0:
         raise AppError(f"whisper.cpp transcription failed:\n{result.stderr.strip()}")
 
-    whisper_json = output_prefix.with_suffix(".json")
-    payload = json.loads(whisper_json.read_text())
+    whisper_json = whisper_cpp_json_path_for(video_id, config)
+    if not whisper_json.exists():
+        raise AppError(
+            "whisper.cpp finished, but its JSON output was not found at "
+            f"{whisper_json}. Check the whisper.cpp version and output flags."
+        )
+    return _transcript_from_whisper_cpp_json(whisper_json, video_id)
+
+
+def _transcript_from_whisper_cpp_json(path: Path, video_id: str) -> Transcript:
+    payload = json.loads(path.read_text())
     raw_segments = payload.get("transcription") or []
     segments = []
     for index, item in enumerate(raw_segments):

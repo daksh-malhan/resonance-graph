@@ -91,7 +91,7 @@ def ingest_url(
         typer.echo(f"Transcript status: {download.episode.transcript_status or 'unknown'}")
         if download.episode.local_transcription_job_id:
             typer.echo(
-                "Local transcription/merge is running in the background. "
+                "Local transcription merge is running in the background. "
                 f"Job ID: {download.episode.local_transcription_job_id}"
             )
         typer.echo(f"Source: {download.episode.source_url}")

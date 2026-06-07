@@ -40,7 +40,7 @@ def _run_finalize_local(job_id: str, video_id: str, config: AppConfig, force: bo
         mark_job_running(job_id, config, stage, message)
 
     try:
-        mark_job_running(job_id, config, "starting", "Starting local transcription finalization")
+        mark_job_running(job_id, config, "starting", "Starting local transcription merge")
         download, chunks = finalize_local_transcript_pipeline(
             video_id,
             config,
@@ -60,7 +60,7 @@ def _run_finalize_local(job_id: str, video_id: str, config: AppConfig, force: bo
             },
         )
     except Exception as exc:
-        logging.exception("Background local finalization failed")
+        logging.exception("Background local transcription merge failed")
         mark_job_failed(job_id, config, str(exc))
         raise
 

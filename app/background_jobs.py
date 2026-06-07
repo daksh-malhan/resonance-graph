@@ -27,7 +27,7 @@ def enqueue_local_finalization(video_id: str, config: AppConfig, force: bool = F
             "video_id": video_id,
             "state": "queued",
             "stage": "queued",
-            "message": "Queued local transcription and merge",
+            "message": "Queued local transcription merge",
             "started_at": None,
             "finished_at": None,
             "result": None,
@@ -131,7 +131,7 @@ def mark_job_failed(job_id: str, config: AppConfig, error: str) -> None:
         config,
         state="failed",
         stage="failed",
-        message="Local transcription finalization failed",
+        message="Local transcription merge failed",
         finished_at=time.time(),
         error=error,
     )

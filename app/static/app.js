@@ -106,7 +106,7 @@ async function pollBackgroundJob(jobId) {
   const job = data.job;
   activeJobs.set(`background-${jobId}`, backgroundJobToProgress(job));
   renderProgressBoard();
-  write(`local merge: ${job.state} - ${job.message}`);
+  write(`Local merge: ${job.state} - ${job.message}`);
   if (job.state === "queued" || job.state === "running") {
     if (["writing_graph", "complete", "embedding_chunks", "merging_transcripts"].includes(job.stage)) {
       await refreshEpisodes();
@@ -125,7 +125,7 @@ async function pollBackgroundJob(jobId) {
 
 function backgroundJobToProgress(job) {
   const percent = stagePercents[job.stage] ?? (job.state === "succeeded" ? 100 : 12);
-  const title = job.result?.title || job.video_id || "Local transcript verification";
+  const title = job.result?.title || job.video_id || "Local transcript merge";
   return {
     id: `background-${job.id}`,
     kind: "local-finalization",
@@ -134,7 +134,7 @@ function backgroundJobToProgress(job) {
     progress: {
       percent,
       stage: job.stage,
-      label: "Local verification",
+      label: "Local merge",
       detail: job.message,
     },
     items: [
