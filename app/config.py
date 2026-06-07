@@ -37,6 +37,13 @@ class AppConfig(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_chat_model: str = "llama3.1:8b"
     ollama_embedding_model: str = "nomic-embed-text"
+    ollama_temperature: float = 0.1
+    ollama_top_p: float = 0.9
+    ollama_top_k: int = 40
+    ollama_repeat_penalty: float = 1.1
+    ollama_num_ctx: int = 8192
+    ollama_num_predict: int = 700
+    ollama_seed: int = 7
 
     youtube_download_dir: Path = Path("data/youtube")
     audio_output_dir: Path = Path("data/audio")
@@ -88,6 +95,9 @@ class AppConfig(BaseSettings):
     @field_validator(
         "chunk_size",
         "retrieval_top_k",
+        "ollama_top_k",
+        "ollama_num_ctx",
+        "ollama_num_predict",
         "max_youtube_resolution",
         "channel_min_video_duration_seconds",
     )
@@ -102,6 +112,13 @@ class AppConfig(BaseSettings):
     def non_negative_int(cls, value: int) -> int:
         if value < 0:
             raise ValueError("must be zero or greater")
+        return value
+
+    @field_validator("ollama_temperature", "ollama_top_p", "ollama_repeat_penalty")
+    @classmethod
+    def positive_float(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("must be greater than zero")
         return value
 
     @field_validator("vector_index_name")

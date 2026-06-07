@@ -1,6 +1,6 @@
 from app.config import AppConfig
 from app.models import RetrievedChunk
-from app.retrieval import retrieve_context
+from app.retrieval import answer_question, is_corpus_overview_question, retrieve_context
 
 
 class FakeOllama:
@@ -39,3 +39,53 @@ def test_retrieve_context_passes_video_filter() -> None:
     )
 
     assert store.video_id == "video-1"
+
+
+class CorpusStore:
+    def vector_search(self, *args, **kwargs):
+        raise AssertionError("corpus overview should not run vector search")
+
+    def list_episodes(self) -> list[dict]:
+        return [
+            {
+                "title": "Howard Marks: AI, Debt vs Equity & The Next 40 Years Of Investing",
+                "video_id": "one",
+                "chunk_count": 12,
+                "transcript_status": "merged_ready",
+            },
+            {
+                "title": "The World Bank President On Why Jobs Fix Everything",
+                "video_id": "two",
+                "chunk_count": 8,
+                "transcript_status": "caption_ready",
+            },
+        ]
+
+
+class NoChatOllama:
+    def embed_text(self, text: str) -> list[float]:
+        raise AssertionError("corpus overview should not embed the question")
+
+    def chat(self, system_prompt: str, user_prompt: str) -> str:
+        raise AssertionError("corpus overview should not call the LLM")
+
+
+def test_corpus_overview_question_uses_episode_titles_without_llm() -> None:
+    result = answer_question(
+        "What is the data about?",
+        CorpusStore(),  # type: ignore[arg-type]
+        NoChatOllama(),  # type: ignore[arg-type]
+        AppConfig(),
+    )
+
+    assert "2 ingested episode" in result.answer
+    assert "investing and markets" in result.answer
+    assert "jobs and development" in result.answer
+    assert "Howard Marks" in result.answer
+    assert result.contexts == []
+
+
+def test_corpus_overview_question_detection() -> None:
+    assert is_corpus_overview_question("What is the data about ?")
+    assert is_corpus_overview_question("summarize this dataset")
+    assert not is_corpus_overview_question("What does Howard Marks say about debt?")

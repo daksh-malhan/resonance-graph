@@ -65,6 +65,15 @@ class OllamaClient:
         payload: dict[str, Any] = {
             "model": self.config.ollama_chat_model,
             "stream": False,
+            "options": {
+                "temperature": self.config.ollama_temperature,
+                "top_p": self.config.ollama_top_p,
+                "top_k": self.config.ollama_top_k,
+                "repeat_penalty": self.config.ollama_repeat_penalty,
+                "num_ctx": self.config.ollama_num_ctx,
+                "num_predict": self.config.ollama_num_predict,
+                "seed": self.config.ollama_seed,
+            },
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

@@ -7,6 +7,21 @@ from app.ollama import OllamaClient
 from app.prompts import SYSTEM_PROMPT, build_answer_prompt
 from app.utils import format_timestamp
 
+CORPUS_OVERVIEW_PHRASES = {
+    "what is the data about",
+    "what is this data about",
+    "what is the dataset about",
+    "what is this dataset about",
+    "what is in the database",
+    "what is in this database",
+    "what is in the library",
+    "what is this library about",
+    "summarize the data",
+    "summarise the data",
+    "summarize this data",
+    "summarise this data",
+}
+
 
 def retrieve_context(
     question: str,
@@ -35,6 +50,9 @@ def answer_question(
     neighbor_window: int = 1,
     video_id: str | None = None,
 ) -> RagAnswer:
+    if video_id is None and is_corpus_overview_question(question):
+        return RagAnswer(answer=build_corpus_overview_answer(store.list_episodes()), contexts=[])
+
     contexts = retrieve_context(question, store, ollama, config, top_k, neighbor_window, video_id)
     prompt = build_answer_prompt(question, contexts)
     answer = ollama.chat(SYSTEM_PROMPT, prompt)
@@ -46,3 +64,76 @@ def answer_question(
         )
         answer = f"{answer}\n\nSources:\n{sources}"
     return RagAnswer(answer=answer, contexts=contexts)
+
+
+def is_corpus_overview_question(question: str) -> bool:
+    normalized = " ".join(
+        question.lower()
+        .replace("?", " ")
+        .replace("!", " ")
+        .replace(".", " ")
+        .replace(",", " ")
+        .split()
+    )
+    if normalized in CORPUS_OVERVIEW_PHRASES:
+        return True
+    return (
+        ("data" in normalized or "dataset" in normalized or "library" in normalized)
+        and any(term in normalized for term in ["about", "summarize", "summarise", "overview"])
+        and len(normalized.split()) <= 8
+    )
+
+
+def build_corpus_overview_answer(episodes: list[dict]) -> str:
+    if not episodes:
+        return "There are no ingested episodes in the local database yet."
+
+    ready = [
+        episode
+        for episode in episodes
+        if int(episode.get("chunk_count") or 0) > 0
+    ]
+    selected = ready or episodes
+    titles = [str(episode.get("title") or episode.get("video_id")) for episode in selected]
+    topics = _topic_hints_from_titles(titles)
+
+    lines = [
+        f"The local database currently contains {len(selected)} ingested episode(s).",
+    ]
+    if topics:
+        lines.append("From the video titles, the collection appears to cover: " + ", ".join(topics) + ".")
+    else:
+        lines.append("From the video titles, it appears to be a collection of podcast/video episodes.")
+
+    lines.append("")
+    lines.append("Episode title sources:")
+    for episode in selected[:10]:
+        title = episode.get("title") or episode.get("video_id")
+        status = episode.get("transcript_status") or "unknown transcript"
+        chunks = int(episode.get("chunk_count") or 0)
+        lines.append(f"- {title} ({status}, {chunks} chunks)")
+
+    if len(selected) > 10:
+        lines.append(f"- ...and {len(selected) - 10} more episode(s).")
+
+    lines.append("")
+    lines.append(
+        "For a transcript-grounded answer with timestamp citations, choose one episode in Scope "
+        "or ask a more specific question."
+    )
+    return "\n".join(lines)
+
+
+def _topic_hints_from_titles(titles: list[str]) -> list[str]:
+    hints: list[str] = []
+    keyword_groups = [
+        ("investing and markets", ["investing", "equity", "debt", "credit", "ai"]),
+        ("entrepreneurship and business", ["startup", "founder", "business", "industries"]),
+        ("jobs and development", ["jobs", "world bank", "infrastructure"]),
+        ("personal growth and psychology", ["trauma", "chaos", "growth"]),
+    ]
+    title_blob = " ".join(titles).lower()
+    for label, keywords in keyword_groups:
+        if any(keyword in title_blob for keyword in keywords):
+            hints.append(label)
+    return hints
