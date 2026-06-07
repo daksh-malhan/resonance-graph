@@ -14,7 +14,7 @@ def retrieve_context(
     ollama: OllamaClient,
     config: AppConfig,
     top_k: int | None = None,
-    neighbor_window: int = 0,
+    neighbor_window: int = 1,
 ) -> list[RetrievedChunk]:
     embedding = ollama.embed_text(question)
     return store.vector_search(
@@ -30,7 +30,7 @@ def answer_question(
     ollama: OllamaClient,
     config: AppConfig,
     top_k: int | None = None,
-    neighbor_window: int = 0,
+    neighbor_window: int = 1,
 ) -> RagAnswer:
     contexts = retrieve_context(question, store, ollama, config, top_k, neighbor_window)
     prompt = build_answer_prompt(question, contexts)

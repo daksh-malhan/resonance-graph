@@ -185,7 +185,7 @@ def ask(
     neighbors: Annotated[
         int,
         typer.Option("--neighbors", help="Include N adjacent chunks around each retrieved chunk."),
-    ] = 0,
+    ] = 1,
     show_context: Annotated[
         bool,
         typer.Option("--show-context", help="Print retrieved context after the answer."),
@@ -217,7 +217,7 @@ def retrieve(
     neighbors: Annotated[
         int,
         typer.Option("--neighbors", help="Include N adjacent chunks around each retrieved chunk."),
-    ] = 0,
+    ] = 1,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed logs.")] = False,
 ) -> None:
     """Print retrieved transcript chunks without generating an answer."""
@@ -319,7 +319,8 @@ def list_episodes(
             typer.echo(
                 f"{episode['video_id']} | {episode['title']} | "
                 f"{episode.get('channel') or 'unknown channel'} | "
-                f"{duration} | chunks: {episode['chunk_count']}"
+                f"{duration} | chunks: {episode['chunk_count']} | "
+                f"{episode.get('transcript_status') or 'unknown'}"
             )
     except Exception as exc:
         _fail(exc)
@@ -395,14 +396,22 @@ def status(
 
 
 def _check_transcription_backend(config: AppConfig) -> None:
-    backend = config.transcription_backend.lower().strip()
+    backend = (config.local_transcription_backend or config.transcription_backend).lower().strip()
+    if backend == "whisper_cpp_metal":
+        backend = "whisper.cpp"
     if backend == "faster-whisper":
         if importlib.util.find_spec("faster_whisper") is None:
             raise AppError("faster-whisper is not installed.")
     elif backend in {"whisper.cpp", "whisper-cpp", "whisper_cpp"}:
-        require_executable(config.whisper_cpp_binary, "Install whisper.cpp.")
-        if not config.whisper_cpp_model:
-            raise AppError("WHISPER_CPP_MODEL is not configured.")
+        try:
+            require_executable(config.whisper_cpp_binary, "Install whisper.cpp.")
+            if not config.whisper_cpp_model:
+                raise AppError("WHISPER_CPP_MODEL is not configured.")
+            if not config.whisper_cpp_model.exists():
+                raise AppError(f"WHISPER_CPP_MODEL does not exist: {config.whisper_cpp_model}")
+        except AppError:
+            if importlib.util.find_spec("faster_whisper") is None:
+                raise
     else:
         raise AppError("Unsupported transcription backend.")
 

@@ -17,31 +17,37 @@ Resonance Graph is built as a modular local pipeline. The MVP focuses on transcr
 
 3. `transcription.py`
    - Transcribes audio locally.
-   - Uses `faster-whisper` by default.
+   - Prefers `whisper.cpp` with Metal on Mac when configured.
+   - Uses `faster-whisper` as the fallback local backend.
    - Preserves timestamped segment boundaries.
 
-4. `chunking.py`
+4. `captions.py`
+   - Extracts legally available YouTube captions from public metadata.
+   - Prefers manual English captions, then English auto-captions.
+   - Parses VTT captions into timestamped transcript segments.
+
+5. `chunking.py`
    - Groups transcript segments into retrieval chunks.
    - Preserves chunk start/end timestamps and source segment IDs.
    - Writes chunk JSON for debugging and cache reuse.
 
-5. `ollama.py`
+6. `ollama.py`
    - Talks to the local Ollama HTTP API.
    - Creates embeddings for chunks and questions.
    - Calls the configured chat model for answer generation.
 
-6. `neo4j_store.py`
+7. `neo4j_store.py`
    - Creates constraints, indexes, and the vector index.
    - Upserts `Source`, `Episode`, `TranscriptSegment`, and `Chunk` nodes.
    - Runs vector retrieval and graph overview queries.
 
-7. `retrieval.py`
+8. `retrieval.py`
    - Embeds questions.
    - Retrieves relevant chunks from Neo4j.
    - Formats retrieved context.
    - Generates transcript-grounded answers.
 
-8. `web.py` and `app/static/`
+9. `web.py` and `app/static/`
    - Provide the local website and JSON endpoints.
    - Reuse the same pipeline modules as the CLI.
 

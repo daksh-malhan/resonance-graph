@@ -18,7 +18,8 @@ This project does not support bypassing DRM, paywalls, private videos, login-onl
 - Approved YouTube channel ingestion for long-form videos while excluding Shorts.
 - Download caching with `yt-dlp` archive support.
 - 16 kHz mono WAV extraction with FFmpeg.
-- Local transcription with `faster-whisper` by default.
+- YouTube captions first when available, with local transcription as the quality pass.
+- Local transcription with `whisper.cpp` Metal preferred on Mac, with `faster-whisper` fallback.
 - Timestamp-preserving transcript chunks.
 - Local embeddings through Ollama.
 - Neo4j graph storage with vector search.
@@ -83,7 +84,8 @@ Core relationships:
 - Ollama
 - FFmpeg
 - `yt-dlp`
-- `faster-whisper` for the default transcription backend
+- `whisper.cpp` with Metal support recommended on Mac
+- `faster-whisper` fallback for local transcription
 
 ## Quick Start
 
@@ -156,15 +158,22 @@ CHUNK_OUTPUT_DIR=data/chunks
 EMBEDDING_CACHE_DIR=data/embeddings
 MODEL_CACHE_DIR=data/models
 CHUNK_SIZE=900
-CHUNK_OVERLAP=150
-RETRIEVAL_TOP_K=5
+CHUNK_OVERLAP=200
+RETRIEVAL_TOP_K=8
 MAX_YOUTUBE_RESOLUTION=720
 CHANNEL_MIN_VIDEO_DURATION_SECONDS=61
 CHANNEL_MAX_VIDEOS=0
 TRANSCRIPTION_BACKEND=faster-whisper
+TRANSCRIPT_FAST_PATH=youtube_captions
+BACKGROUND_LOCAL_TRANSCRIPTION=true
+LOCAL_TRANSCRIPTION_BACKEND=whisper_cpp_metal
+WHISPER_MODEL_SIZE=base
+TRANSCRIPT_MERGE_STRATEGY=time_overlap_best_text
 FASTER_WHISPER_MODEL=base
 FASTER_WHISPER_DEVICE=cpu
 FASTER_WHISPER_COMPUTE_TYPE=int8
+WHISPER_CPP_BINARY=whisper-cli
+WHISPER_CPP_MODEL=data/models/whisper.cpp/ggml-base.bin
 ```
 
 ## Neo4j Setup
@@ -229,7 +238,20 @@ sudo apt-get install ffmpeg
 
 ## Transcription Setup
 
-Default backend:
+Recommended Mac backend:
+
+```env
+TRANSCRIPT_FAST_PATH=youtube_captions
+BACKGROUND_LOCAL_TRANSCRIPTION=true
+LOCAL_TRANSCRIPTION_BACKEND=whisper_cpp_metal
+WHISPER_MODEL_SIZE=base
+WHISPER_CPP_BINARY=whisper-cli
+WHISPER_CPP_MODEL=data/models/whisper.cpp/ggml-base.bin
+```
+
+With this setup, Resonance Graph ingests YouTube captions first when available, then runs local Whisper in the background pass and merges the local transcript with captions.
+
+Fallback backend:
 
 ```env
 TRANSCRIPTION_BACKEND=faster-whisper
@@ -346,6 +368,9 @@ The pipeline is resumable:
 - A `yt-dlp` download archive prevents duplicate downloads.
 - Extracted WAV audio is cached in `data/audio/`.
 - Transcript JSON is cached in `data/transcripts/`.
+- YouTube caption transcripts are cached as `data/transcripts/{video_id}.youtube.transcript.json`.
+- Local Whisper transcripts are cached as `data/transcripts/{video_id}.local.transcript.json`.
+- Merged transcripts are cached as `data/transcripts/{video_id}.transcript.json`.
 - Chunk JSON is cached in `data/chunks/`.
 - Embeddings are cached by model and text hash in `data/embeddings/`.
 - Local transcription models are cached in `data/models/`.

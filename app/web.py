@@ -233,7 +233,7 @@ def ask_question(config: AppConfig, body: dict[str, Any]) -> dict:
     if not question:
         raise AppError("Question is required.")
     top_k = int(body.get("top_k") or config.retrieval_top_k)
-    neighbors = int(body.get("neighbors") or 0)
+    neighbors = int(body.get("neighbors") if body.get("neighbors") is not None else 1)
     ollama = OllamaClient(config)
     store = Neo4jStore(config)
     try:
@@ -264,12 +264,27 @@ def start_ingest_url_job(state: WebState, body: dict[str, Any]) -> str:
     job_id = state.jobs.create("ingest-url")
 
     def run() -> None:
-        state.jobs.update(job_id, state="running", message="Ingesting video", started_at=time.time())
+        def on_stage(stage: str, message: str) -> None:
+            state.jobs.update(job_id, state="running", stage=stage, message=message)
+
+        state.jobs.update(
+            job_id,
+            state="running",
+            stage="queued",
+            message="Ingesting video",
+            started_at=time.time(),
+        )
         try:
-            download, chunks = ingest_url_pipeline(url, state.config, force=force)
+            download, chunks = ingest_url_pipeline(
+                url,
+                state.config,
+                force=force,
+                stage_callback=on_stage,
+            )
             state.jobs.update(
                 job_id,
                 state="succeeded",
+                stage="complete",
                 message="Video ingested",
                 finished_at=time.time(),
                 result={
@@ -277,12 +292,15 @@ def start_ingest_url_job(state: WebState, body: dict[str, Any]) -> str:
                     "title": download.episode.title,
                     "chunks": len(chunks),
                     "source_url": download.episode.source_url,
+                    "transcript_source": download.episode.transcript_source,
+                    "transcript_status": download.episode.transcript_status,
                 },
             )
         except Exception as exc:
             state.jobs.update(
                 job_id,
                 state="failed",
+                stage="failed",
                 message="Video ingest failed",
                 finished_at=time.time(),
                 error=str(exc),
@@ -332,6 +350,7 @@ def start_ingest_channel_job(state: WebState, body: dict[str, Any]) -> str:
                             "video_id": download.episode.video_id,
                             "title": download.episode.title,
                             "chunks": len(chunks),
+                            "transcript_status": download.episode.transcript_status,
                             "ok": True,
                         }
                     )

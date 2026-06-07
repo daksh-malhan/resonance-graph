@@ -46,18 +46,23 @@ class AppConfig(BaseSettings):
     model_cache_dir: Path = Path("data/models")
 
     chunk_size: int = 900
-    chunk_overlap: int = 150
-    retrieval_top_k: int = 5
+    chunk_overlap: int = 200
+    retrieval_top_k: int = 8
     max_youtube_resolution: int = 720
     channel_min_video_duration_seconds: int = 61
     channel_max_videos: int = 0
 
     transcription_backend: str = "faster-whisper"
+    transcript_fast_path: str = "youtube_captions"
+    background_local_transcription: bool = True
+    local_transcription_backend: str = "whisper_cpp_metal"
+    whisper_model_size: str = "base"
+    transcript_merge_strategy: str = "time_overlap_best_text"
     faster_whisper_model: str = "base"
     faster_whisper_device: str = "cpu"
     faster_whisper_compute_type: str = "int8"
     whisper_cpp_binary: str = "whisper-cli"
-    whisper_cpp_model: Path | None = None
+    whisper_cpp_model: Path | None = Path("data/models/whisper.cpp/ggml-base.bin")
 
     vector_index_name: str = "chunk_embedding_index"
     app_config_file: Path | None = Field(default=None, exclude=True)
@@ -69,10 +74,13 @@ class AppConfig(BaseSettings):
         "chunk_output_dir",
         "embedding_cache_dir",
         "model_cache_dir",
+        "whisper_cpp_model",
         mode="before",
     )
     @classmethod
-    def expand_path(cls, value: str | Path) -> Path:
+    def expand_path(cls, value: str | Path | None) -> Path | None:
+        if value is None:
+            return None
         return Path(value).expanduser()
 
     @field_validator(

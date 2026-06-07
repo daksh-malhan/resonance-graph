@@ -24,13 +24,17 @@ def chunk_transcript(
     if output_path.exists() and not force:
         logger.info("Using cached chunks %s", output_path)
         payload = read_json(output_path)
-        return [TranscriptChunk.model_validate(item) for item in payload]
+        chunks = [TranscriptChunk.model_validate(item) for item in payload]
+        if chunks and chunks[0].transcript_source == transcript.source:
+            return chunks
+        logger.info("Cached chunks source differs from transcript; rebuilding chunks")
 
     chunks = build_chunks(
         transcript.segments,
         video_id=transcript.video_id,
         chunk_size=config.chunk_size,
         chunk_overlap=config.chunk_overlap,
+        transcript_source=transcript.source,
     )
     write_json(output_path, chunks)
     return chunks
@@ -41,6 +45,7 @@ def build_chunks(
     video_id: str,
     chunk_size: int,
     chunk_overlap: int,
+    transcript_source: str = "local_whisper",
 ) -> list[TranscriptChunk]:
     if chunk_size <= 0:
         raise ValueError("chunk_size must be greater than zero")
@@ -54,7 +59,7 @@ def build_chunks(
     for segment in segments:
         text_len = len(segment.text)
         if current and current_len + 1 + text_len > chunk_size:
-            chunks.append(_make_chunk(video_id, len(chunks), current))
+            chunks.append(_make_chunk(video_id, len(chunks), current, transcript_source))
             current = _overlap_tail(current, chunk_overlap)
             current_len = _segments_text_len(current)
 
@@ -62,12 +67,17 @@ def build_chunks(
         current_len += text_len + (1 if current_len else 0)
 
     if current:
-        chunks.append(_make_chunk(video_id, len(chunks), current))
+        chunks.append(_make_chunk(video_id, len(chunks), current, transcript_source))
 
     return chunks
 
 
-def _make_chunk(video_id: str, ordinal: int, segments: list[TranscriptSegment]) -> TranscriptChunk:
+def _make_chunk(
+    video_id: str,
+    ordinal: int,
+    segments: list[TranscriptSegment],
+    transcript_source: str,
+) -> TranscriptChunk:
     text = " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
     return TranscriptChunk(
         chunk_id=f"{video_id}:chunk:{ordinal:06d}",
@@ -77,6 +87,7 @@ def _make_chunk(video_id: str, ordinal: int, segments: list[TranscriptSegment]) 
         start_time=min(segment.start_time for segment in segments),
         end_time=max(segment.end_time for segment in segments),
         segment_ids=[segment.segment_id for segment in segments],
+        transcript_source=transcript_source,
     )
 
 

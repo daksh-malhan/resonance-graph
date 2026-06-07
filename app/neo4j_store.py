@@ -83,6 +83,7 @@ class Neo4jStore:
 
         with self.driver.session() as session:
             session.execute_write(self._merge_source_episode, source, episode)
+            session.execute_write(self._clear_episode_transcript, episode["video_id"])
             session.execute_write(self._merge_segments, episode["video_id"], segments)
             session.execute_write(self._merge_chunks, episode["video_id"], chunk_payload)
 
@@ -102,11 +103,30 @@ class Neo4jStore:
                 e.upload_date = $episode.upload_date,
                 e.local_video_path = $episode.local_video_path,
                 e.info_json_path = $episode.info_json_path,
+                e.transcript_source = $episode.transcript_source,
+                e.transcript_status = $episode.transcript_status,
                 e.updated_at = datetime()
             MERGE (s)-[:HAS_EPISODE]->(e)
             """,
             source=source,
             episode=episode,
+        )
+
+    @staticmethod
+    def _clear_episode_transcript(tx, video_id: str) -> None:
+        tx.run(
+            """
+            MATCH (e:Episode {video_id: $video_id})-[:HAS_CHUNK]->(c:Chunk)
+            DETACH DELETE c
+            """,
+            video_id=video_id,
+        )
+        tx.run(
+            """
+            MATCH (e:Episode {video_id: $video_id})-[:HAS_SEGMENT]->(ts:TranscriptSegment)
+            DETACH DELETE ts
+            """,
+            video_id=video_id,
         )
 
     @staticmethod
@@ -119,7 +139,8 @@ class Neo4jStore:
             SET ts.video_id = segment.video_id,
                 ts.start_time = segment.start_time,
                 ts.end_time = segment.end_time,
-                ts.text = segment.text
+                ts.text = segment.text,
+                ts.source = segment.source
             MERGE (e)-[:HAS_SEGMENT]->(ts)
             """,
             video_id=video_id,
@@ -139,6 +160,7 @@ class Neo4jStore:
                 c.start_time = chunk.start_time,
                 c.end_time = chunk.end_time,
                 c.segment_ids = chunk.segment_ids,
+                c.transcript_source = chunk.transcript_source,
                 c.embedding = chunk.embedding,
                 c.updated_at = datetime()
             MERGE (e)-[:HAS_CHUNK]->(c)
@@ -172,7 +194,8 @@ class Neo4jStore:
                        node.start_time AS start_time,
                        node.end_time AS end_time,
                        score AS score,
-                       node.ordinal AS ordinal
+                       node.ordinal AS ordinal,
+                       node.transcript_source AS transcript_source
                 ORDER BY score DESC
                 """,
                 index_name=self.config.vector_index_name,
@@ -193,6 +216,7 @@ class Neo4jStore:
                 start_time=float(record["start_time"]),
                 end_time=float(record["end_time"]),
                 score=float(record["score"]),
+                transcript_source=record.get("transcript_source") or "local_whisper",
             )
             for record in _dedupe_records(records)
         ]
@@ -213,7 +237,8 @@ class Neo4jStore:
                        c.start_time AS start_time,
                        c.end_time AS end_time,
                        0.0 AS score,
-                       c.ordinal AS ordinal
+                       c.ordinal AS ordinal,
+                       c.transcript_source AS transcript_source
                 ORDER BY c.ordinal
                 """,
                 video_id=record["video_id"],
@@ -234,6 +259,8 @@ class Neo4jStore:
                        e.channel AS channel,
                        e.duration AS duration,
                        e.source_url AS source_url,
+                       e.transcript_source AS transcript_source,
+                       e.transcript_status AS transcript_status,
                        e.updated_at AS updated_at,
                        count(c) AS chunk_count
                 ORDER BY updated_at DESC, title ASC
@@ -256,6 +283,8 @@ class Neo4jStore:
                        e.source_url AS source_url,
                        e.local_video_path AS local_video_path,
                        e.info_json_path AS info_json_path,
+                       e.transcript_source AS transcript_source,
+                       e.transcript_status AS transcript_status,
                        segment_count AS segment_count,
                        count(c) AS chunk_count,
                        min(c.start_time) AS first_chunk_start,

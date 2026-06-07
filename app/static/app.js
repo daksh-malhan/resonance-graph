@@ -109,9 +109,10 @@ async function refreshEpisodes() {
   for (const episode of data.episodes) {
     const item = document.createElement("div");
     item.className = "episode";
+    const transcriptStatus = episode.transcript_status || "unknown transcript";
     item.innerHTML = `
       <strong>${episode.title}</strong>
-      <span>${episode.video_id} · ${episode.channel || "unknown"} · chunks ${episode.chunk_count}</span>
+      <span>${episode.video_id} · ${episode.channel || "unknown"} · chunks ${episode.chunk_count} · ${transcriptStatus}</span>
     `;
     item.onclick = () => {
       selectedVideoId = episode.video_id;

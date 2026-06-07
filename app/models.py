@@ -20,6 +20,8 @@ class EpisodeMetadata(BaseModel):
     upload_date: str | None = None
     local_video_path: Path | None = None
     info_json_path: Path | None = None
+    transcript_source: str | None = None
+    transcript_status: str | None = None
 
 
 class DownloadResult(BaseModel):
@@ -42,11 +44,13 @@ class TranscriptSegment(BaseModel):
     start_time: float
     end_time: float
     text: str
+    source: str = "local_whisper"
 
 
 class Transcript(BaseModel):
     video_id: str
     segments: list[TranscriptSegment]
+    source: str = "local_whisper"
 
 
 class TranscriptChunk(BaseModel):
@@ -58,6 +62,7 @@ class TranscriptChunk(BaseModel):
     end_time: float
     segment_ids: list[str] = Field(default_factory=list)
     embedding: list[float] | None = None
+    transcript_source: str = "local_whisper"
 
 
 class RetrievedChunk(BaseModel):
@@ -69,6 +74,7 @@ class RetrievedChunk(BaseModel):
     start_time: float
     end_time: float
     score: float
+    transcript_source: str = "local_whisper"
 
 
 class RagAnswer(BaseModel):

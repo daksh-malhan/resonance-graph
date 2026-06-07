@@ -12,10 +12,16 @@ from app.models import Transcript, TranscriptSegment
 from app.utils import read_model, require_executable, write_json
 
 logger = logging.getLogger(__name__)
+LOCAL_SOURCE = "local_whisper"
+MERGED_SOURCE = "merged"
 
 
 def transcript_path_for(video_id: str, config: AppConfig) -> Path:
     return config.transcript_output_dir / f"{video_id}.transcript.json"
+
+
+def local_transcript_path_for(video_id: str, config: AppConfig) -> Path:
+    return config.transcript_output_dir / f"{video_id}.local.transcript.json"
 
 
 def transcribe_audio(
@@ -25,23 +31,80 @@ def transcribe_audio(
     force: bool = False,
 ) -> Transcript:
     config.transcript_output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = transcript_path_for(video_id, config)
+    output_path = local_transcript_path_for(video_id, config)
     if output_path.exists() and not force:
-        logger.info("Using cached transcript %s", output_path)
+        logger.info("Using cached local transcript %s", output_path)
         return read_model(output_path, Transcript)
 
-    backend = config.transcription_backend.lower().strip()
+    backend = _local_backend(config)
     if backend == "faster-whisper":
         transcript = _transcribe_with_faster_whisper(audio_path, video_id, config)
     elif backend in {"whisper.cpp", "whisper-cpp", "whisper_cpp"}:
-        transcript = _transcribe_with_whisper_cpp(audio_path, video_id, config)
+        try:
+            transcript = _transcribe_with_whisper_cpp(audio_path, video_id, config)
+        except AppError:
+            if config.transcription_backend.lower().strip() in {
+                "whisper.cpp",
+                "whisper-cpp",
+                "whisper_cpp",
+            }:
+                raise
+            logger.exception("whisper.cpp failed; falling back to faster-whisper")
+            transcript = _transcribe_with_faster_whisper(audio_path, video_id, config)
     else:
         raise AppError(
             "Unsupported transcription backend. Use 'faster-whisper' or 'whisper.cpp'."
         )
 
+    transcript = transcript.model_copy(update={"source": LOCAL_SOURCE})
+    transcript.segments[:] = [
+        segment.model_copy(update={"source": LOCAL_SOURCE}) for segment in transcript.segments
+    ]
     write_json(output_path, transcript)
     return transcript
+
+
+def write_primary_transcript(transcript: Transcript, config: AppConfig) -> Transcript:
+    output_path = transcript_path_for(transcript.video_id, config)
+    write_json(output_path, transcript)
+    return transcript
+
+
+def merge_transcripts(
+    caption_transcript: Transcript | None,
+    local_transcript: Transcript | None,
+    video_id: str,
+) -> Transcript:
+    if caption_transcript is None and local_transcript is None:
+        return Transcript(video_id=video_id, segments=[], source=MERGED_SOURCE)
+    if caption_transcript is None:
+        assert local_transcript is not None
+        return local_transcript.model_copy(update={"source": LOCAL_SOURCE})
+    if local_transcript is None:
+        return caption_transcript.model_copy(update={"source": "youtube_caption"})
+
+    merged: list[TranscriptSegment] = []
+    caption_segments = caption_transcript.segments
+    for local in local_transcript.segments:
+        if _usable_local_segment(local):
+            merged.append(_merged_segment(local, len(merged), video_id, local.text))
+            continue
+
+        caption = _best_caption_overlap(local, caption_segments)
+        if caption:
+            merged.append(_merged_segment(caption, len(merged), video_id, caption.text))
+
+    local_ranges = [(segment.start_time, segment.end_time) for segment in local_transcript.segments]
+    for caption in caption_segments:
+        if not any(_ranges_overlap(caption.start_time, caption.end_time, start, end) for start, end in local_ranges):
+            merged.append(_merged_segment(caption, len(merged), video_id, caption.text))
+
+    merged = sorted(merged, key=lambda segment: (segment.start_time, segment.end_time))
+    merged = [
+        segment.model_copy(update={"segment_id": f"{video_id}:merged:{index:06d}"})
+        for index, segment in enumerate(_dedupe_segments(merged))
+    ]
+    return Transcript(video_id=video_id, segments=merged, source=MERGED_SOURCE)
 
 
 def _transcribe_with_faster_whisper(
@@ -61,7 +124,7 @@ def _transcribe_with_faster_whisper(
     except ImportError as exc:
         raise AppError(
             "faster-whisper is not installed. Install with "
-            "'pip install local-podcast-graphrag[transcription]' or 'pip install faster-whisper'."
+            "'pip install resonance-graph[transcription]' or 'pip install faster-whisper'."
         ) from exc
 
     if not audio_path.exists():
@@ -102,6 +165,8 @@ def _transcribe_with_whisper_cpp(
     )
     if not config.whisper_cpp_model:
         raise AppError("WHISPER_CPP_MODEL must point to a local whisper.cpp model file.")
+    if not Path(config.whisper_cpp_model).exists():
+        raise AppError(f"WHISPER_CPP_MODEL does not exist: {config.whisper_cpp_model}")
 
     output_prefix = config.transcript_output_dir / f"{video_id}.whispercpp"
     command = [
@@ -140,3 +205,66 @@ def _transcribe_with_whisper_cpp(
             )
         )
     return Transcript(video_id=video_id, segments=segments)
+
+
+def _local_backend(config: AppConfig) -> str:
+    backend = (config.local_transcription_backend or config.transcription_backend).lower().strip()
+    if backend == "whisper_cpp_metal":
+        return "whisper.cpp"
+    return backend
+
+
+def _usable_local_segment(segment: TranscriptSegment) -> bool:
+    text = segment.text.strip()
+    if len(text) < 2:
+        return False
+    if len(set(text.lower().split())) <= 1 and len(text.split()) > 5:
+        return False
+    return True
+
+
+def _best_caption_overlap(
+    local: TranscriptSegment,
+    captions: list[TranscriptSegment],
+) -> TranscriptSegment | None:
+    candidates = [
+        (min(local.end_time, caption.end_time) - max(local.start_time, caption.start_time), caption)
+        for caption in captions
+        if _ranges_overlap(local.start_time, local.end_time, caption.start_time, caption.end_time)
+    ]
+    candidates = [(overlap, caption) for overlap, caption in candidates if overlap > 0]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def _merged_segment(
+    source: TranscriptSegment,
+    index: int,
+    video_id: str,
+    text: str,
+) -> TranscriptSegment:
+    return TranscriptSegment(
+        segment_id=f"{video_id}:merged:{index:06d}",
+        video_id=video_id,
+        start_time=source.start_time,
+        end_time=source.end_time,
+        text=text.strip(),
+        source=MERGED_SOURCE,
+    )
+
+
+def _dedupe_segments(segments: list[TranscriptSegment]) -> list[TranscriptSegment]:
+    output: list[TranscriptSegment] = []
+    last_key: tuple[float, float, str] | None = None
+    for segment in segments:
+        key = (round(segment.start_time, 2), round(segment.end_time, 2), segment.text)
+        if key == last_key:
+            continue
+        output.append(segment)
+        last_key = key
+    return output
+
+
+def _ranges_overlap(start_a: float, end_a: float, start_b: float, end_b: float) -> bool:
+    return max(start_a, start_b) <= min(end_a, end_b)
