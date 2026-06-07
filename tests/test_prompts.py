@@ -7,6 +7,7 @@ def test_retrieval_context_includes_citations() -> None:
         chunk_id="vid:chunk:000000",
         video_id="vid",
         episode_title="Example Episode",
+        episode_channel="Example Channel",
         source_url="https://www.youtube.com/watch?v=vid",
         text="The host explains local embeddings.",
         start_time=65,
@@ -17,8 +18,10 @@ def test_retrieval_context_includes_citations() -> None:
     context = format_retrieval_context([chunk])
 
     assert "Example Episode" in context
+    assert "Example Channel" in context
     assert "<episode_context>" in context
     assert "Episode title: Example Episode" in context
+    assert "Episode channel: Example Channel" in context
     assert "01:05-01:35" in context
     assert "<transcript_source>local_whisper</transcript_source>" in context
     assert "The host explains local embeddings." in context
@@ -41,6 +44,7 @@ def test_prompt_allows_title_context_without_treating_it_as_transcript_evidence(
                 chunk_id="vid:chunk:000000",
                 video_id="vid",
                 episode_title="Dr. Jane Smith on Memory and Learning",
+                episode_channel="People by WTF",
                 source_url="https://www.youtube.com/watch?v=vid",
                 text="Today we discuss how memory consolidation works.",
                 start_time=10,
@@ -52,5 +56,6 @@ def test_prompt_allows_title_context_without_treating_it_as_transcript_evidence(
     )
 
     assert "Dr. Jane Smith on Memory and Learning" in prompt
+    assert "People by WTF" in prompt
     assert "Episode title: Dr. Jane Smith on Memory and Learning" in prompt
-    assert "based only on the video title" in prompt
+    assert "video title or channel/uploader name" in prompt

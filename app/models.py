@@ -70,6 +70,7 @@ class RetrievedChunk(BaseModel):
     chunk_id: str
     video_id: str
     episode_title: str
+    episode_channel: str | None = None
     source_url: str
     text: str
     start_time: float

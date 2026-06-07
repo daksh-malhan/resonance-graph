@@ -28,6 +28,7 @@ def test_pydantic_models_accept_mvp_fields() -> None:
         chunk_id=chunk.chunk_id,
         video_id=episode.video_id,
         episode_title=episode.title,
+        episode_channel="Example Channel",
         source_url=episode.source_url,
         text=chunk.text,
         start_time=chunk.start_time,
@@ -37,3 +38,4 @@ def test_pydantic_models_accept_mvp_fields() -> None:
 
     assert chunk.segment_ids == [segment.segment_id]
     assert retrieved.episode_title == "Example"
+    assert retrieved.episode_channel == "Example Channel"
