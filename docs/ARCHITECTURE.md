@@ -6,7 +6,8 @@ Resonance Graph is built as a modular local pipeline. The MVP focuses on transcr
 
 1. `youtube.py`
    - Validates approved YouTube input at the tool boundary.
-   - Downloads videos with `yt-dlp`.
+   - Fetches public video metadata without media download for the normal captions-first path.
+   - Downloads videos with `yt-dlp` only when local audio/transcription is needed.
    - Stores source metadata and info JSON.
    - Discovers long-form channel videos while excluding Shorts.
 
@@ -33,7 +34,8 @@ Resonance Graph is built as a modular local pipeline. The MVP focuses on transcr
 
 6. `channel_pipeline.py`
    - Runs channel ingestion through bounded stage lanes instead of whole-video parallelism.
-   - Lets downloads, audio extraction, caption lookup, embedding/graph writes, and local fallback transcription overlap safely.
+   - Makes metadata and caption lookup the first path so caption-backed videos can become searchable before media download.
+   - Lets caption lookup, embedding/graph writes, downloads, audio extraction, and local fallback transcription overlap safely.
    - Uses separate worker counts from config so heavy stages remain constrained.
 
 7. `roles.py`
@@ -68,9 +70,10 @@ Resonance Graph is built as a modular local pipeline. The MVP focuses on transcr
 
 ## Channel Pipelining
 
-Channel ingestion uses stage pipelining rather than launching full video ingests in parallel. A video can leave the download lane and enter audio extraction while another video starts downloading. The default lane sizes are:
+Channel ingestion uses stage pipelining rather than launching full video ingests in parallel. A video first moves through serialized metadata lookup, then caption lookup. When captions exist, it can go straight to chunking, embeddings, and Neo4j without media download. When captions are missing, it enters the media download and local transcription fallback lanes. The default lane sizes are:
 
-- Download lane: `PIPELINE_DOWNLOAD_WORKERS=2`
+- Metadata lane: serialized by design to reduce YouTube throttling pressure.
+- Download lane: `PIPELINE_DOWNLOAD_WORKERS=2`, used for local fallback or transcript improvement.
 - Audio lane: `PIPELINE_AUDIO_WORKERS=2`
 - Caption lane: `PIPELINE_CAPTION_WORKERS=3`
 - Ingest lane: `PIPELINE_INGEST_WORKERS=1`

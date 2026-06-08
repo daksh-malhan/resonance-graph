@@ -77,7 +77,7 @@ def ingest_url(
     ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed logs.")] = False,
 ) -> None:
-    """Download an approved YouTube video, transcribe it locally, and ingest it into Neo4j."""
+    """Ingest an approved YouTube video with the captions-first pipeline."""
     try:
         config = _config(verbose)
         download, chunks = ingest_url_pipeline(
@@ -131,7 +131,7 @@ def ingest_channel(
     ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed logs.")] = False,
 ) -> None:
-    """Discover and ingest long-form videos from an approved YouTube channel."""
+    """Discover and ingest long-form channel videos with the pipelined method."""
     try:
         config = _config(verbose)
         if limit is not None and limit < 0:

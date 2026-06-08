@@ -313,13 +313,13 @@ Create Neo4j schema:
 resonance setup-db
 ```
 
-Ingest an approved video:
+Ingest an approved video with the captions-first pipeline:
 
 ```bash
 resonance ingest-url "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-If YouTube captions are available, this returns after the caption graph is searchable and prints a background job id for the local Whisper merge.
+If YouTube captions are available, this returns after the caption graph is searchable and prints a background job id for the local Whisper merge. Media download and local Whisper are deferred until they are needed for transcript improvement or fallback.
 
 Preview long-form videos from an approved channel:
 
@@ -327,7 +327,7 @@ Preview long-form videos from an approved channel:
 resonance ingest-channel "https://www.youtube.com/@CHANNEL/videos" --dry-run
 ```
 
-Ingest long-form videos from an approved channel:
+Ingest long-form videos from an approved channel with the staged pipeline:
 
 ```bash
 resonance ingest-channel "https://www.youtube.com/@CHANNEL/videos"
@@ -424,15 +424,16 @@ Use `--force` on ingestion commands to redo expensive stages.
 
 Entries with unknown duration are kept unless they are explicit Shorts URLs, because some channel listing responses do not include duration until individual video metadata is fetched.
 
-Channel ingestion uses staged pipelining. Different videos can occupy different stages at the same time, while expensive shared resources stay bounded:
+Channel ingestion uses the staged pipeline by default. It fetches public metadata, checks legally available captions, and makes caption-backed videos searchable before downloading media. Different videos can occupy different stages at the same time, while expensive shared resources stay bounded:
 
-- `PIPELINE_DOWNLOAD_WORKERS`: approved video downloads and metadata.
+- Metadata lookup is intentionally serialized to reduce YouTube throttling pressure.
+- `PIPELINE_DOWNLOAD_WORKERS`: approved media downloads for local fallback or local transcript improvement.
 - `PIPELINE_AUDIO_WORKERS`: FFmpeg audio extraction.
 - `PIPELINE_CAPTION_WORKERS`: YouTube caption lookup and parsing.
 - `PIPELINE_INGEST_WORKERS`: chunking, Ollama embeddings, and Neo4j writes.
 - `PIPELINE_LOCAL_WORKERS`: local Whisper fallback for videos without captions.
 
-The default keeps embeddings, graph writes, and local transcription conservative. Large channels can still take a long time because every long-form video must be downloaded, transcribed or captioned, embedded, and written to Neo4j. Use `--dry-run` first, then `--limit N` for a smaller initial import.
+The default keeps embeddings, graph writes, and local transcription conservative. Large channels can still take a long time because every caption transcript must be embedded and written to Neo4j, and captionless videos still need media download plus local transcription. Use `--dry-run` first, then `--limit N` for a smaller initial import.
 
 ## Repository Layout
 

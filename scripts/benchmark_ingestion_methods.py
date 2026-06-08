@@ -307,7 +307,7 @@ def _method_config(config: AppConfig, root: Path) -> AppConfig:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Compare old sequential channel ingest with pipelined ingest.")
+    parser = argparse.ArgumentParser(description="Compare pipelined channel ingest with the old sequential baseline.")
     parser.add_argument("channel_url")
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--force", action="store_true", help="Force redownload/rebuild for both method runs.")
@@ -325,7 +325,7 @@ def main() -> None:
     parser.add_argument(
         "--order",
         choices=["old-first", "pipeline-first"],
-        default="old-first",
+        default="pipeline-first",
         help="Run order for the two methods.",
     )
     parser.add_argument(

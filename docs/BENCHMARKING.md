@@ -32,6 +32,16 @@ Tune retrieval settings:
 resonance benchmark evals/my-safe-benchmark.yaml --top-k 8 --neighbors 1
 ```
 
+## Ingestion Method Timing
+
+Normal ingestion uses the captions-first pipelined method. The old sequential download-first method is kept only as a timing baseline in the helper script:
+
+```bash
+python scripts/benchmark_ingestion_methods.py "https://www.youtube.com/@CHANNEL/videos" --limit 3 --max-resolution 144 --isolate-method-dirs
+```
+
+The helper defaults to `--order pipeline-first` so the normal method gets measured before the old baseline can trigger YouTube throttling.
+
 ## Eval File Format
 
 ```yaml
