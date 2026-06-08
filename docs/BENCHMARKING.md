@@ -32,6 +32,8 @@ Tune retrieval settings:
 resonance benchmark evals/my-safe-benchmark.yaml --top-k 8 --neighbors 0
 ```
 
+By default, retrieval asks Neo4j for `RETRIEVAL_CANDIDATE_TOP_K=20` vector candidates, reranks them locally, and keeps the final `--top-k` chunks for the answer context.
+
 ## Ingestion Method Timing
 
 Normal ingestion uses the captions-first pipelined method. The old sequential download-first method is kept only as a timing baseline in the helper script:

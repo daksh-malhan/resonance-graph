@@ -55,15 +55,21 @@ Resonance Graph is built as a modular local pipeline. The MVP focuses on transcr
 
 10. `retrieval.py`
    - Embeds questions.
-   - Retrieves relevant chunks from Neo4j, optionally scoped to one episode.
+   - Retrieves a wider candidate set from Neo4j, then reranks to the final context count.
+   - Can optionally scope retrieval to one episode.
    - Formats retrieved context.
    - Generates transcript-grounded answers.
 
-11. `web.py` and `app/static/`
+11. `reranking.py`
+   - Reranks vector candidates with local lexical and metadata signals.
+   - Uses transcript text plus episode title, channel, uploader, creator, and role candidates.
+   - Keeps reranking local and replaceable for a future cross-encoder.
+
+12. `web.py` and `app/static/`
    - Provide the local website and JSON endpoints.
    - Reuse the same pipeline modules as the CLI.
 
-12. `background_jobs.py` and `worker.py`
+13. `background_jobs.py` and `worker.py`
    - Store detached local transcription job state as JSON under `data/jobs`.
    - Run local Whisper, transcript merge, re-chunking, re-embedding, and Neo4j updates after caption-ready ingest returns.
    - Preserve resumability through cached media, audio, captions, local transcripts, chunks, and embeddings.
@@ -115,6 +121,6 @@ Near-term extensions should add modules rather than overloading existing ones:
 - `entities.py` for entity/topic/claim extraction.
 - LLM-backed role extraction that emits validated JSON into the existing `RoleCandidate` model.
 - `api.py` for a future FastAPI backend.
-- `reranking.py` for retrieval reranking.
+- Cross-encoder or LLM-backed reranking behind the existing `reranking.py` interface.
 
 The graph can be extended with `Frame`, `Entity`, `Topic`, and `Claim` nodes while preserving the current transcript-first core.

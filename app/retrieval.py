@@ -7,6 +7,7 @@ from app.models import RagAnswer, RetrievedChunk
 from app.neo4j_store import Neo4jStore
 from app.ollama import OllamaClient
 from app.prompts import SYSTEM_PROMPT, build_answer_prompt
+from app.reranking import rerank_chunks
 from app.utils import format_timestamp
 
 CORPUS_OVERVIEW_PHRASES = {
@@ -34,13 +35,16 @@ def retrieve_context(
     neighbor_window: int = 0,
     video_id: str | None = None,
 ) -> list[RetrievedChunk]:
+    final_top_k = top_k or config.retrieval_top_k
+    candidate_top_k = max(final_top_k, config.retrieval_candidate_top_k)
     embedding = ollama.embed_text(question)
-    return store.vector_search(
+    candidates = store.vector_search(
         question_embedding=embedding,
-        top_k=top_k or config.retrieval_top_k,
+        top_k=candidate_top_k,
         neighbor_window=neighbor_window,
         video_id=video_id,
     )
+    return rerank_chunks(question, candidates, final_top_k)
 
 
 def answer_question(

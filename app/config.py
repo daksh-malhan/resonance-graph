@@ -56,6 +56,7 @@ class AppConfig(BaseSettings):
     chunk_size: int = 900
     chunk_overlap: int = 200
     retrieval_top_k: int = 8
+    retrieval_candidate_top_k: int = 20
     max_youtube_resolution: int = 720
     channel_min_video_duration_seconds: int = 61
     channel_max_videos: int = 0
@@ -100,6 +101,7 @@ class AppConfig(BaseSettings):
     @field_validator(
         "chunk_size",
         "retrieval_top_k",
+        "retrieval_candidate_top_k",
         "ollama_top_k",
         "ollama_num_ctx",
         "ollama_num_predict",

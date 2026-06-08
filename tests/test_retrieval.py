@@ -14,6 +14,11 @@ class FakeOllama:
         return [0.1, 0.2, 0.3]
 
 
+class AnyQuestionOllama:
+    def embed_text(self, text: str) -> list[float]:
+        return [0.1, 0.2, 0.3]
+
+
 class FakeStore:
     def __init__(self) -> None:
         self.video_id = None
@@ -26,7 +31,7 @@ class FakeStore:
         video_id: str | None = None,
     ) -> list[RetrievedChunk]:
         assert question_embedding == [0.1, 0.2, 0.3]
-        assert top_k == 4
+        assert top_k == 20
         assert neighbor_window == 0
         self.video_id = video_id
         return []
@@ -44,6 +49,56 @@ def test_retrieve_context_passes_video_filter() -> None:
     )
 
     assert store.video_id == "video-1"
+
+
+class RerankStore:
+    def __init__(self) -> None:
+        self.requested_top_k = None
+
+    def vector_search(
+        self,
+        question_embedding: list[float],
+        top_k: int,
+        neighbor_window: int = 0,
+        video_id: str | None = None,
+    ) -> list[RetrievedChunk]:
+        self.requested_top_k = top_k
+        return [
+            RetrievedChunk(
+                chunk_id="general",
+                video_id="one",
+                episode_title="General Podcast",
+                source_url="https://www.youtube.com/watch?v=one",
+                text="This section talks broadly about health routines.",
+                start_time=0,
+                end_time=10,
+                score=0.91,
+            ),
+            RetrievedChunk(
+                chunk_id="specific",
+                video_id="one",
+                episode_title="Sleep and Circadian Rhythm",
+                source_url="https://www.youtube.com/watch?v=one",
+                text="Morning sunlight helps anchor circadian rhythm and improve sleep timing.",
+                start_time=20,
+                end_time=30,
+                score=0.82,
+            ),
+        ]
+
+
+def test_retrieve_context_reranks_candidates_to_final_top_k() -> None:
+    store = RerankStore()
+
+    chunks = retrieve_context(
+        "What helps circadian rhythm?",
+        store,  # type: ignore[arg-type]
+        AnyQuestionOllama(),  # type: ignore[arg-type]
+        AppConfig(retrieval_top_k=1, retrieval_candidate_top_k=20),
+    )
+
+    assert store.requested_top_k == 20
+    assert [chunk.chunk_id for chunk in chunks] == ["specific"]
 
 
 class CorpusStore:
