@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from app.background_jobs import list_jobs, read_job
+from app.channel_pipeline import ChannelPipelineEvent, run_channel_ingest_pipeline
 from app.config import AppConfig, load_config
 from app.errors import AppError
 from app.neo4j_store import Neo4jStore
@@ -439,7 +440,7 @@ def start_ingest_channel_job(state: WebState, body: dict[str, Any]) -> str:
                 min_duration_seconds=min_duration,
                 limit=limit,
             )
-            result = {"succeeded": 0, "failed": 0, "total": len(videos), "items": []}
+            result = {"succeeded": 0, "failed": 0, "skipped": 0, "total": len(videos), "items": []}
             progress_items = [
                 progress_item(
                     title=video.title,
@@ -454,83 +455,47 @@ def start_ingest_channel_job(state: WebState, body: dict[str, Any]) -> str:
             state.jobs.update(
                 job_id,
                 stage="queued",
+                message="Queued videos for staged ingest",
                 progress=channel_progress_payload(progress_items),
                 items=progress_items,
                 result=result,
             )
-            for index, video in enumerate(videos, start=1):
+
+            def on_item(event: ChannelPipelineEvent) -> None:
+                progress_items[event.index - 1] = progress_item(
+                    title=event.video.title,
+                    video_id=event.video.video_id,
+                    stage=event.stage,
+                    message=event.message,
+                    state=event.state,
+                )
                 state.jobs.update(
                     job_id,
-                    message=f"Ingesting {index}/{len(videos)}: {video.title}",
+                    state="running",
+                    stage=event.stage,
+                    message=f"{event.index}/{event.total}: {event.message}",
                     progress=channel_progress_payload(progress_items),
                     items=progress_items,
                     result=result,
                 )
-                try:
-                    def on_stage(stage: str, message: str) -> None:
-                        progress_items[index - 1] = progress_item(
-                            title=video.title,
-                            video_id=video.video_id,
-                            stage=stage,
-                            message=message,
-                            state="running",
-                        )
-                        state.jobs.update(
-                            job_id,
-                            state="running",
-                            stage=stage,
-                            message=f"{index}/{len(videos)}: {message}",
-                            progress=channel_progress_payload(progress_items),
-                            items=progress_items,
-                            result=result,
-                        )
 
-                    download, chunks = ingest_url_pipeline(
-                        video.url,
-                        state.config,
-                        force=force,
-                        stage_callback=on_stage,
-                        background_local=True,
-                    )
-                    result["succeeded"] += 1
-                    progress_items[index - 1] = progress_item(
-                        title=download.episode.title,
-                        video_id=download.episode.video_id,
-                        stage="complete",
-                        message=download.episode.transcript_status or "Video ingested",
-                        state="succeeded",
-                        percent=100,
-                    )
-                    result["items"].append(
-                        {
-                            "video_id": download.episode.video_id,
-                            "title": download.episode.title,
-                            "chunks": len(chunks),
-                            "transcript_status": download.episode.transcript_status,
-                            "local_transcription_job_id": download.episode.local_transcription_job_id,
-                            "ok": True,
-                        }
-                    )
-                except Exception as exc:
-                    result["failed"] += 1
-                    progress_items[index - 1] = progress_item(
-                        title=video.title,
-                        video_id=video.video_id,
-                        stage="failed",
-                        message=str(exc),
-                        state="failed",
-                        percent=100,
-                    )
-                    result["items"].append(
-                        {
-                            "video_id": video.video_id,
-                            "title": video.title,
-                            "ok": False,
-                            "error": str(exc),
-                        }
-                    )
-                    if stop_on_error:
-                        raise
+            pipeline_result = run_channel_ingest_pipeline(
+                videos,
+                state.config,
+                force=force,
+                stop_on_error=stop_on_error,
+                background_local=True,
+                item_callback=on_item,
+            )
+            result.update(
+                {
+                    "succeeded": pipeline_result.succeeded,
+                    "failed": pipeline_result.failed,
+                    "skipped": pipeline_result.skipped,
+                    "total": pipeline_result.total,
+                    "items": pipeline_result.items,
+                }
+            )
 
             state.jobs.update(
                 job_id,
@@ -627,14 +592,16 @@ def channel_progress_payload(items: list[dict[str, Any]]) -> dict[str, Any]:
             "detail": "No matching videos found",
         }
     percent = round(sum(int(item.get("percent") or 0) for item in items) / len(items))
-    running = next((item for item in items if item.get("state") == "running"), None)
+    running_items = [item for item in items if item.get("state") == "running"]
+    running = running_items[0] if running_items else None
     completed = sum(1 for item in items if item.get("state") == "succeeded")
     failed = sum(1 for item in items if item.get("state") == "failed")
     detail = f"{completed} complete"
     if failed:
         detail += f", {failed} failed"
-    if running:
-        detail += f" · {running.get('title')}"
+    if running_items:
+        active_titles = ", ".join(str(item.get("title") or "Untitled") for item in running_items[:3])
+        detail += f" · {len(running_items)} active: {active_titles}"
     return {
         "percent": percent,
         "stage": running.get("stage") if running else "complete" if completed + failed == len(items) else "queued",

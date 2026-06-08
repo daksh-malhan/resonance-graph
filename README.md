@@ -16,6 +16,7 @@ This project does not support bypassing DRM, paywalls, private videos, login-onl
 
 - Single approved YouTube video ingestion.
 - Approved YouTube channel ingestion for long-form videos while excluding Shorts.
+- Stage-pipelined channel ingestion with bounded download, audio, caption, ingest, and local transcription lanes.
 - Download caching with `yt-dlp` archive support.
 - 16 kHz mono WAV extraction with FFmpeg.
 - YouTube captions first when available, with local transcription as the quality pass.
@@ -180,6 +181,11 @@ RETRIEVAL_TOP_K=8
 MAX_YOUTUBE_RESOLUTION=720
 CHANNEL_MIN_VIDEO_DURATION_SECONDS=61
 CHANNEL_MAX_VIDEOS=0
+PIPELINE_DOWNLOAD_WORKERS=2
+PIPELINE_AUDIO_WORKERS=2
+PIPELINE_CAPTION_WORKERS=3
+PIPELINE_INGEST_WORKERS=1
+PIPELINE_LOCAL_WORKERS=1
 TRANSCRIPTION_BACKEND=faster-whisper
 TRANSCRIPT_FAST_PATH=youtube_captions
 BACKGROUND_LOCAL_TRANSCRIPTION=true
@@ -418,13 +424,22 @@ Use `--force` on ingestion commands to redo expensive stages.
 
 Entries with unknown duration are kept unless they are explicit Shorts URLs, because some channel listing responses do not include duration until individual video metadata is fetched.
 
-Large channels can take a long time because every long-form video is downloaded, transcribed, embedded, and written to Neo4j. Use `--dry-run` first, then `--limit N` for a smaller initial import.
+Channel ingestion uses staged pipelining. Different videos can occupy different stages at the same time, while expensive shared resources stay bounded:
+
+- `PIPELINE_DOWNLOAD_WORKERS`: approved video downloads and metadata.
+- `PIPELINE_AUDIO_WORKERS`: FFmpeg audio extraction.
+- `PIPELINE_CAPTION_WORKERS`: YouTube caption lookup and parsing.
+- `PIPELINE_INGEST_WORKERS`: chunking, Ollama embeddings, and Neo4j writes.
+- `PIPELINE_LOCAL_WORKERS`: local Whisper fallback for videos without captions.
+
+The default keeps embeddings, graph writes, and local transcription conservative. Large channels can still take a long time because every long-form video must be downloaded, transcribed or captioned, embedded, and written to Neo4j. Use `--dry-run` first, then `--limit N` for a smaller initial import.
 
 ## Repository Layout
 
 ```text
 app/
   audio.py              FFmpeg audio extraction
+  channel_pipeline.py   Stage-pipelined channel ingestion runner
   chunking.py           Timestamp-aware transcript chunking
   cli.py                Typer CLI
   config.py             .env/YAML/TOML config loading

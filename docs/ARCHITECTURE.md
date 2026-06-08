@@ -31,35 +31,52 @@ Resonance Graph is built as a modular local pipeline. The MVP focuses on transcr
    - Preserves chunk start/end timestamps and source segment IDs.
    - Writes chunk JSON for debugging and cache reuse.
 
-6. `roles.py`
+6. `channel_pipeline.py`
+   - Runs channel ingestion through bounded stage lanes instead of whole-video parallelism.
+   - Lets downloads, audio extraction, caption lookup, embedding/graph writes, and local fallback transcription overlap safely.
+   - Uses separate worker counts from config so heavy stages remain constrained.
+
+7. `roles.py`
    - Extracts generic role candidates from YouTube metadata, titles, descriptions, and transcript intros.
    - Stores channel/uploader/creator as actual metadata roles, not inferred hosts.
    - Adds `possible_host` and `possible_guest` only when reusable evidence patterns support them.
 
-7. `ollama.py`
+8. `ollama.py`
    - Talks to the local Ollama HTTP API.
    - Creates embeddings for chunks and questions.
    - Calls the configured chat model for answer generation.
 
-8. `neo4j_store.py`
+9. `neo4j_store.py`
    - Creates constraints, indexes, and the vector index.
    - Upserts `Source`, `Episode`, `TranscriptSegment`, `Chunk`, `RoleCandidate`, and `Person` nodes.
    - Runs vector retrieval and graph overview queries.
 
-9. `retrieval.py`
+10. `retrieval.py`
    - Embeds questions.
    - Retrieves relevant chunks from Neo4j, optionally scoped to one episode.
    - Formats retrieved context.
    - Generates transcript-grounded answers.
 
-10. `web.py` and `app/static/`
+11. `web.py` and `app/static/`
    - Provide the local website and JSON endpoints.
    - Reuse the same pipeline modules as the CLI.
 
-11. `background_jobs.py` and `worker.py`
+12. `background_jobs.py` and `worker.py`
    - Store detached local transcription job state as JSON under `data/jobs`.
    - Run local Whisper, transcript merge, re-chunking, re-embedding, and Neo4j updates after caption-ready ingest returns.
    - Preserve resumability through cached media, audio, captions, local transcripts, chunks, and embeddings.
+
+## Channel Pipelining
+
+Channel ingestion uses stage pipelining rather than launching full video ingests in parallel. A video can leave the download lane and enter audio extraction while another video starts downloading. The default lane sizes are:
+
+- Download lane: `PIPELINE_DOWNLOAD_WORKERS=2`
+- Audio lane: `PIPELINE_AUDIO_WORKERS=2`
+- Caption lane: `PIPELINE_CAPTION_WORKERS=3`
+- Ingest lane: `PIPELINE_INGEST_WORKERS=1`
+- Local transcription fallback lane: `PIPELINE_LOCAL_WORKERS=1`
+
+This keeps I/O stages moving while protecting Ollama, Neo4j, and local Whisper from uncontrolled contention.
 
 ## Graph Model
 

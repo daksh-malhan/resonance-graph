@@ -32,30 +32,20 @@ def ingest_url_pipeline(
     background_local: bool = False,
 ) -> tuple[DownloadResult, list[TranscriptChunk]]:
     config.ensure_directories()
-    _stage(stage_callback, "downloading", "Downloading video and metadata")
-    download = download_youtube_video(url, config, force=force)
+    download = download_video_stage(url, config, force=force, stage_callback=stage_callback)
 
-    _stage(stage_callback, "extracting_audio", "Extracting normalized audio")
-    audio_path = extract_audio(download.episode, config, force=force)
+    extract_audio_stage(download, config, force=force, stage_callback=stage_callback)
 
-    caption_transcript: Transcript | None = None
-    if config.transcript_fast_path.lower().strip() == "youtube_captions":
-        _stage(stage_callback, "fetching_captions", "Checking for YouTube captions")
-        caption_transcript = extract_youtube_caption_transcript(download, config, force=force)
+    caption_transcript = fetch_caption_stage(download, config, force=force, stage_callback=stage_callback)
 
     final_download = download
     final_chunks: list[TranscriptChunk] = []
     if caption_transcript and caption_transcript.segments:
-        _stage(stage_callback, "caption_ingesting", "Ingesting caption transcript")
-        preserve_primary_local_transcript(download.episode.video_id, config)
-        write_primary_transcript(caption_transcript, config)
-        final_download, final_chunks = _ingest_transcript(
+        final_download, final_chunks = ingest_caption_stage(
             download,
             caption_transcript,
             config,
             force=force,
-            transcript_source="youtube_caption",
-            transcript_status="caption_ready",
             stage_callback=stage_callback,
         )
         _stage(stage_callback, "caption_ready", "Caption transcript is searchable")
@@ -65,18 +55,11 @@ def ingest_url_pipeline(
         return final_download, final_chunks
 
     if caption_transcript and background_local:
-        job_id = enqueue_local_finalization(download.episode.video_id, config, force=force)
-        _stage(
-            stage_callback,
-            "local_transcription_queued",
-            f"Queued local transcription job {job_id}",
-        )
-        final_download = final_download.model_copy(
-            update={
-                "episode": final_download.episode.model_copy(
-                    update={"local_transcription_job_id": job_id}
-                )
-            }
+        final_download = queue_local_transcription_stage(
+            final_download,
+            config,
+            force=force,
+            stage_callback=stage_callback,
         )
         return final_download, final_chunks
 
@@ -89,6 +72,80 @@ def ingest_url_pipeline(
         caption_transcript=caption_transcript,
     )
     return final_download, final_chunks
+
+
+def download_video_stage(
+    url: str,
+    config: AppConfig,
+    force: bool = False,
+    stage_callback: StageCallback | None = None,
+) -> DownloadResult:
+    _stage(stage_callback, "downloading", "Downloading video and metadata")
+    return download_youtube_video(url, config, force=force)
+
+
+def extract_audio_stage(
+    download: DownloadResult,
+    config: AppConfig,
+    force: bool = False,
+    stage_callback: StageCallback | None = None,
+) -> None:
+    _stage(stage_callback, "extracting_audio", "Extracting normalized audio")
+    extract_audio(download.episode, config, force=force)
+
+
+def fetch_caption_stage(
+    download: DownloadResult,
+    config: AppConfig,
+    force: bool = False,
+    stage_callback: StageCallback | None = None,
+) -> Transcript | None:
+    if config.transcript_fast_path.lower().strip() != "youtube_captions":
+        return None
+    _stage(stage_callback, "fetching_captions", "Checking for YouTube captions")
+    return extract_youtube_caption_transcript(download, config, force=force)
+
+
+def ingest_caption_stage(
+    download: DownloadResult,
+    caption_transcript: Transcript,
+    config: AppConfig,
+    force: bool = False,
+    stage_callback: StageCallback | None = None,
+) -> tuple[DownloadResult, list[TranscriptChunk]]:
+    _stage(stage_callback, "caption_ingesting", "Ingesting caption transcript")
+    preserve_primary_local_transcript(download.episode.video_id, config)
+    write_primary_transcript(caption_transcript, config)
+    return _ingest_transcript(
+        download,
+        caption_transcript,
+        config,
+        force=force,
+        transcript_source="youtube_caption",
+        transcript_status="caption_ready",
+        stage_callback=stage_callback,
+    )
+
+
+def queue_local_transcription_stage(
+    download: DownloadResult,
+    config: AppConfig,
+    force: bool = False,
+    stage_callback: StageCallback | None = None,
+) -> DownloadResult:
+    job_id = enqueue_local_finalization(download.episode.video_id, config, force=force)
+    _stage(
+        stage_callback,
+        "local_transcription_queued",
+        f"Queued local transcription job {job_id}",
+    )
+    return download.model_copy(
+        update={
+            "episode": download.episode.model_copy(
+                update={"local_transcription_job_id": job_id}
+            )
+        }
+    )
 
 
 def finalize_local_transcript_pipeline(

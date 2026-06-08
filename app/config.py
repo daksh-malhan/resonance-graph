@@ -59,6 +59,11 @@ class AppConfig(BaseSettings):
     max_youtube_resolution: int = 720
     channel_min_video_duration_seconds: int = 61
     channel_max_videos: int = 0
+    pipeline_download_workers: int = 2
+    pipeline_audio_workers: int = 2
+    pipeline_caption_workers: int = 3
+    pipeline_ingest_workers: int = 1
+    pipeline_local_workers: int = 1
 
     transcription_backend: str = "faster-whisper"
     transcript_fast_path: str = "youtube_captions"
@@ -100,6 +105,11 @@ class AppConfig(BaseSettings):
         "ollama_num_predict",
         "max_youtube_resolution",
         "channel_min_video_duration_seconds",
+        "pipeline_download_workers",
+        "pipeline_audio_workers",
+        "pipeline_caption_workers",
+        "pipeline_ingest_workers",
+        "pipeline_local_workers",
     )
     @classmethod
     def positive_int(cls, value: int) -> int:

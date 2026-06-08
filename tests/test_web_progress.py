@@ -28,3 +28,17 @@ def test_channel_progress_empty_is_complete() -> None:
 
     assert payload["percent"] == 100
     assert payload["stage"] == "complete"
+
+
+def test_channel_progress_summarizes_multiple_active_items() -> None:
+    items = [
+        progress_item("One", "downloading", "Downloading", "running"),
+        progress_item("Two", "fetching_captions", "Checking captions", "running"),
+        progress_item("Three", "queued", "Waiting", "queued"),
+    ]
+
+    payload = channel_progress_payload(items)
+
+    assert "2 active" in payload["detail"]
+    assert "One" in payload["detail"]
+    assert "Two" in payload["detail"]

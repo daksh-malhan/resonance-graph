@@ -8,6 +8,7 @@ import typer
 
 from app.benchmark import load_benchmark_suite, run_benchmark, write_report
 from app.background_jobs import list_jobs, read_job
+from app.channel_pipeline import ChannelPipelineEvent, run_channel_ingest_pipeline
 from app.config import AppConfig, load_config
 from app.errors import AppError
 from app.neo4j_store import Neo4jStore
@@ -165,29 +166,29 @@ def ingest_channel(
                 typer.echo(f"{index}. {video.video_id} | {duration} | {video.title} | {video.url}")
             return
 
-        succeeded = 0
-        failed = 0
-        for index, video in enumerate(videos, start=1):
-            typer.echo(f"\n[{index}/{len(videos)}] Ingesting: {video.title}")
-            try:
-                download, chunks = ingest_url_pipeline(
-                    video.url,
-                    config,
-                    force=force,
-                    background_local=True,
-                )
-            except Exception as exc:
-                failed += 1
-                typer.secho(f"Failed: {video.title}\n{exc}", fg=typer.colors.RED, err=True)
-                if stop_on_error:
-                    raise typer.Exit(code=1)
-                continue
+        seen_stages: set[tuple[str, str]] = set()
 
-            succeeded += 1
-            typer.echo(f"Ingested: {download.episode.video_id} | chunks: {len(chunks)}")
+        def on_item(event: ChannelPipelineEvent) -> None:
+            key = (event.video.video_id, event.stage)
+            if key in seen_stages and event.stage not in {"complete", "failed"}:
+                return
+            seen_stages.add(key)
+            typer.echo(f"[{event.index}/{event.total}] {event.video.title} | {event.stage}: {event.message}")
 
-        typer.echo(f"\nChannel ingest complete. Succeeded: {succeeded}. Failed: {failed}.")
-        if failed:
+        result = run_channel_ingest_pipeline(
+            videos,
+            config,
+            force=force,
+            stop_on_error=stop_on_error,
+            background_local=True,
+            item_callback=on_item,
+        )
+
+        typer.echo(
+            "\nChannel ingest complete. "
+            f"Succeeded: {result.succeeded}. Failed: {result.failed}. Skipped: {result.skipped}."
+        )
+        if result.failed:
             raise typer.Exit(code=1)
     except typer.Exit:
         raise

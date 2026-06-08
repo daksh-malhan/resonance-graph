@@ -52,3 +52,8 @@ def test_channel_config_defaults() -> None:
 
     assert config.channel_min_video_duration_seconds == 61
     assert config.channel_max_videos == 0
+    assert config.pipeline_download_workers == 2
+    assert config.pipeline_audio_workers == 2
+    assert config.pipeline_caption_workers == 3
+    assert config.pipeline_ingest_workers == 1
+    assert config.pipeline_local_workers == 1
