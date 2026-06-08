@@ -2,6 +2,7 @@ from app.config import AppConfig
 from app.models import RetrievedChunk
 from app.retrieval import (
     answer_question,
+    build_corpus_overview_answer,
     is_corpus_overview_question,
     retrieve_context,
 )
@@ -96,6 +97,29 @@ def test_corpus_overview_question_detection() -> None:
     assert is_corpus_overview_question("What is the data about ?")
     assert is_corpus_overview_question("summarize this dataset")
     assert not is_corpus_overview_question("What does Howard Marks say about debt?")
+
+
+def test_corpus_overview_does_not_match_ai_inside_brain() -> None:
+    answer = build_corpus_overview_answer(
+        [
+            {
+                "title": "Essentials: Psychedelics & Neurostimulation for Brain Rewiring",
+                "video_id": "brain-video",
+                "chunk_count": 59,
+                "transcript_status": "merged_ready",
+            },
+            {
+                "title": "Peptides: The Science, Uses & Safety | Dr. Abud Bakri",
+                "video_id": "peptides-video",
+                "chunk_count": 935,
+                "transcript_status": "caption_ready",
+            },
+        ]
+    )
+
+    assert "neuroscience and brain health" in answer
+    assert "medicine and health" in answer
+    assert "investing and markets" not in answer
 
 
 class HostQuestionStore:

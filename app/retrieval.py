@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from app.config import AppConfig
 from app.models import RagAnswer, RetrievedChunk
 from app.neo4j_store import Neo4jStore
@@ -131,13 +133,20 @@ def _normalize_question(question: str) -> str:
 def _topic_hints_from_titles(titles: list[str]) -> list[str]:
     hints: list[str] = []
     keyword_groups = [
-        ("investing and markets", ["investing", "equity", "debt", "credit", "ai"]),
+        ("neuroscience and brain health", ["neuroscience", "brain", "neurostimulation", "learning", "psychedelics"]),
+        ("medicine and health", ["science", "safety", "peptides", "speaking languages"]),
+        ("investing and markets", ["investing", "equity", "debt", "credit", "artificial intelligence"]),
         ("entrepreneurship and business", ["startup", "founder", "business", "industries"]),
         ("jobs and development", ["jobs", "world bank", "infrastructure"]),
         ("personal growth and psychology", ["trauma", "chaos", "growth"]),
     ]
     title_blob = " ".join(titles).lower()
     for label, keywords in keyword_groups:
-        if any(keyword in title_blob for keyword in keywords):
+        if any(_contains_keyword(title_blob, keyword) for keyword in keywords):
             hints.append(label)
     return hints
+
+
+def _contains_keyword(text: str, keyword: str) -> bool:
+    escaped = re.escape(keyword.lower())
+    return re.search(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])", text) is not None
