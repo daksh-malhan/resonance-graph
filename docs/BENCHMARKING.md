@@ -29,7 +29,7 @@ resonance benchmark evals/my-safe-benchmark.yaml --retrieval-only
 Tune retrieval settings:
 
 ```bash
-resonance benchmark evals/my-safe-benchmark.yaml --top-k 8 --neighbors 1
+resonance benchmark evals/my-safe-benchmark.yaml --top-k 8 --neighbors 0
 ```
 
 ## Ingestion Method Timing
@@ -129,14 +129,14 @@ Only publish metrics for videos and questions you are allowed to disclose.
 If retrieval is weak:
 
 - Increase `--top-k`.
-- Try `--neighbors 1`.
+- Keep `--neighbors 0` when adjacent chunks add noise; try `--neighbors 1` only for questions that clearly need surrounding context.
 - Reduce chunk size or overlap if chunks are too broad.
 - Add better expected timestamp ranges to identify where retrieval misses.
 
 If answers are weak but retrieval is strong:
 
 - Tune the answer prompt.
-- Increase neighbor context.
+- Increase neighbor context only when the retrieved chunk is consistently too narrow.
 - Use a stronger local chat model.
 - Add negative-control cases to catch hallucination.
 

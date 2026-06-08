@@ -277,7 +277,7 @@ def ask_question(config: AppConfig, body: dict[str, Any]) -> dict:
     if not question:
         raise AppError("Question is required.")
     top_k = int(body.get("top_k") or config.retrieval_top_k)
-    neighbors = int(body.get("neighbors") if body.get("neighbors") is not None else 1)
+    neighbors = int(body.get("neighbors") if body.get("neighbors") is not None else 0)
     video_id = str(body.get("video_id") or "").strip() or None
     ollama = OllamaClient(config)
     store = Neo4jStore(config)

@@ -27,7 +27,7 @@ class FakeStore:
     ) -> list[RetrievedChunk]:
         assert question_embedding == [0.1, 0.2, 0.3]
         assert top_k == 4
-        assert neighbor_window == 1
+        assert neighbor_window == 0
         self.video_id = video_id
         return []
 

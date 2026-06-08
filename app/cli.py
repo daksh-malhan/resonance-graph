@@ -203,7 +203,7 @@ def ask(
     neighbors: Annotated[
         int,
         typer.Option("--neighbors", help="Include N adjacent chunks around each retrieved chunk."),
-    ] = 1,
+    ] = 0,
     show_context: Annotated[
         bool,
         typer.Option("--show-context", help="Print retrieved context after the answer."),
@@ -247,7 +247,7 @@ def retrieve(
     neighbors: Annotated[
         int,
         typer.Option("--neighbors", help="Include N adjacent chunks around each retrieved chunk."),
-    ] = 1,
+    ] = 0,
     video_id: Annotated[
         str | None,
         typer.Option("--video-id", help="Restrict retrieval to one ingested YouTube video id."),

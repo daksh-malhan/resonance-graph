@@ -31,7 +31,7 @@ def retrieve_context(
     ollama: OllamaClient,
     config: AppConfig,
     top_k: int | None = None,
-    neighbor_window: int = 1,
+    neighbor_window: int = 0,
     video_id: str | None = None,
 ) -> list[RetrievedChunk]:
     embedding = ollama.embed_text(question)
@@ -49,7 +49,7 @@ def answer_question(
     ollama: OllamaClient,
     config: AppConfig,
     top_k: int | None = None,
-    neighbor_window: int = 1,
+    neighbor_window: int = 0,
     video_id: str | None = None,
 ) -> RagAnswer:
     if video_id is None and is_corpus_overview_question(question):
