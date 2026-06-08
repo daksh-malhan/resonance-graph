@@ -4,7 +4,7 @@ from app.web import channel_progress_payload, progress_item, progress_payload
 def test_progress_payload_maps_known_stage() -> None:
     payload = progress_payload("fetching_captions", "Checking captions")
 
-    assert payload["percent"] == 30
+    assert payload["percent"] == 18
     assert payload["label"] == "Fetching Captions"
     assert payload["detail"] == "Checking captions"
 
@@ -17,7 +17,7 @@ def test_channel_progress_averages_video_items() -> None:
 
     payload = channel_progress_payload(items)
 
-    assert payload["percent"] == 65
+    assert payload["percent"] == 59
     assert payload["stage"] == "fetching_captions"
     assert "One" not in payload["detail"]
     assert "Two" in payload["detail"]

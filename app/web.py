@@ -29,9 +29,10 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 STAGE_PROGRESS = {
     "queued": 2,
-    "downloading": 8,
-    "extracting_audio": 18,
-    "fetching_captions": 30,
+    "fetching_metadata": 8,
+    "fetching_captions": 18,
+    "downloading": 30,
+    "extracting_audio": 38,
     "caption_ingesting": 44,
     "caption_ready": 58,
     "local_transcription_queued": 64,

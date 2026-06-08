@@ -18,7 +18,7 @@ from app.transcription import (
     write_primary_transcript,
 )
 from app.utils import read_model
-from app.youtube import download_youtube_video, load_download_result
+from app.youtube import download_youtube_video, fetch_youtube_metadata, load_download_result
 
 logger = logging.getLogger(__name__)
 StageCallback = Callable[[str, str], None]
@@ -32,10 +32,7 @@ def ingest_url_pipeline(
     background_local: bool = False,
 ) -> tuple[DownloadResult, list[TranscriptChunk]]:
     config.ensure_directories()
-    download = download_video_stage(url, config, force=force, stage_callback=stage_callback)
-
-    extract_audio_stage(download, config, force=force, stage_callback=stage_callback)
-
+    download = fetch_metadata_stage(url, config, force=force, stage_callback=stage_callback)
     caption_transcript = fetch_caption_stage(download, config, force=force, stage_callback=stage_callback)
 
     final_download = download
@@ -72,6 +69,16 @@ def ingest_url_pipeline(
         caption_transcript=caption_transcript,
     )
     return final_download, final_chunks
+
+
+def fetch_metadata_stage(
+    url: str,
+    config: AppConfig,
+    force: bool = False,
+    stage_callback: StageCallback | None = None,
+) -> DownloadResult:
+    _stage(stage_callback, "fetching_metadata", "Fetching video metadata")
+    return fetch_youtube_metadata(url, config, force=force)
 
 
 def download_video_stage(
@@ -159,6 +166,10 @@ def finalize_local_transcript_pipeline(
 ) -> tuple[DownloadResult, list[TranscriptChunk]]:
     config.ensure_directories()
     download = download or load_download_result(video_id, config)
+    if not download.episode.local_video_path:
+        source_url = download.episode.source_url or download.source.url
+        _stage(stage_callback, "downloading", "Downloading media for local transcription")
+        download = download_youtube_video(source_url, config, force=force)
 
     if caption_transcript is None:
         caption_path = youtube_transcript_path_for(video_id, config)

@@ -148,6 +148,61 @@ def download_youtube_video(url: str, config: AppConfig, force: bool = False) -> 
     return result
 
 
+def fetch_youtube_metadata(url: str, config: AppConfig, force: bool = False) -> DownloadResult:
+    """Fetch public YouTube metadata without downloading media.
+
+    This is used by the caption-first ingestion path so a video can become
+    searchable from normal public captions before expensive media download,
+    audio extraction, or local transcription begins.
+    """
+    try:
+        YouTubeUrl(url=url)
+    except ValidationError as exc:
+        raise AppError("Please provide a valid YouTube video URL.") from exc
+
+    require_executable("yt-dlp", "Install it with 'pip install yt-dlp'.")
+    try:
+        import yt_dlp
+        from yt_dlp.utils import DownloadError
+    except ImportError as exc:
+        raise AppError("yt-dlp is not installed. Install project dependencies first.") from exc
+
+    ydl_opts = {
+        "skip_download": True,
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": False,
+        "ignoreerrors": False,
+    }
+    logger.info("Fetching public YouTube metadata for %s", url)
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except DownloadError as exc:
+        raise AppError(f"yt-dlp metadata fetch failed: {exc}") from exc
+
+    if not info:
+        raise AppError("yt-dlp metadata fetch returned no video information.")
+    video_id = info.get("id")
+    if not video_id:
+        raise AppError("yt-dlp metadata did not include a video id.")
+
+    config.ensure_directories()
+    episode_dir = config.youtube_download_dir / str(video_id)
+    episode_dir.mkdir(parents=True, exist_ok=True)
+    info_json_path = episode_dir / f"{video_id}.info.json"
+    metadata_path = episode_dir / "metadata.json"
+    if not force and metadata_path.exists() and info_json_path.exists():
+        return DownloadResult.model_validate_json(metadata_path.read_text())
+
+    write_json(info_json_path, info)
+    episode = parse_youtube_metadata(info, episode_dir)
+    source = SourceMetadata(id=episode.source_url or url, url=episode.source_url or url)
+    result = DownloadResult(source=source, episode=episode, episode_dir=episode_dir)
+    write_json(metadata_path, result)
+    return result
+
+
 def load_download_result(video_id: str, config: AppConfig) -> DownloadResult:
     metadata_path = config.youtube_download_dir / video_id / "metadata.json"
     if not metadata_path.exists():

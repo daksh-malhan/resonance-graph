@@ -39,6 +39,7 @@ def test_caption_fast_path_ingests_caption_then_merged(monkeypatch, tmp_path: Pa
     )
     calls: list[str] = []
 
+    monkeypatch.setattr("app.pipeline.fetch_youtube_metadata", lambda *args, **kwargs: download)
     monkeypatch.setattr("app.pipeline.download_youtube_video", lambda *args, **kwargs: download)
     monkeypatch.setattr("app.pipeline.extract_audio", lambda *args, **kwargs: tmp_path / "audio.wav")
     monkeypatch.setattr(
@@ -102,7 +103,11 @@ def test_caption_fast_path_can_queue_background_local_merge(monkeypatch, tmp_pat
         episode_dir=tmp_path / "youtube" / "vid",
     )
 
-    monkeypatch.setattr("app.pipeline.download_youtube_video", lambda *args, **kwargs: download)
+    monkeypatch.setattr("app.pipeline.fetch_youtube_metadata", lambda *args, **kwargs: download)
+    monkeypatch.setattr(
+        "app.pipeline.download_youtube_video",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("background caption path should not download media immediately")),
+    )
     monkeypatch.setattr("app.pipeline.extract_audio", lambda *args, **kwargs: tmp_path / "audio.wav")
     monkeypatch.setattr(
         "app.pipeline.extract_youtube_caption_transcript",

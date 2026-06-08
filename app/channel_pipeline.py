@@ -10,6 +10,7 @@ from app.models import ChannelVideo, DownloadResult, Transcript, TranscriptChunk
 from app.pipeline import (
     download_video_stage,
     extract_audio_stage,
+    fetch_metadata_stage,
     fetch_caption_stage,
     finalize_local_transcript_pipeline,
     ingest_caption_stage,
@@ -165,9 +166,18 @@ def run_channel_ingest_pipeline(
         future = executor.submit(fn, item)
         future.add_done_callback(lambda completed: callback(item, completed))
 
-    def run_download(item: ChannelPipelineItem) -> DownloadResult:
-        return download_video_stage(
+    def run_metadata(item: ChannelPipelineItem) -> DownloadResult:
+        return fetch_metadata_stage(
             item.video.url,
+            config,
+            force=force,
+            stage_callback=stage_callback_for(item),
+        )
+
+    def run_download(item: ChannelPipelineItem) -> DownloadResult:
+        assert item.download is not None
+        return download_video_stage(
+            item.download.episode.source_url or item.download.source.url,
             config,
             force=force,
             stage_callback=stage_callback_for(item),
@@ -223,12 +233,21 @@ def run_channel_ingest_pipeline(
         )
 
     with (
+        ThreadPoolExecutor(max_workers=1, thread_name_prefix="metadata") as metadata_pool,
         ThreadPoolExecutor(max_workers=config.pipeline_download_workers, thread_name_prefix="download") as download_pool,
         ThreadPoolExecutor(max_workers=config.pipeline_audio_workers, thread_name_prefix="audio") as audio_pool,
         ThreadPoolExecutor(max_workers=config.pipeline_caption_workers, thread_name_prefix="captions") as caption_pool,
         ThreadPoolExecutor(max_workers=config.pipeline_ingest_workers, thread_name_prefix="ingest") as ingest_pool,
         ThreadPoolExecutor(max_workers=config.pipeline_local_workers, thread_name_prefix="local") as local_pool,
     ):
+
+        def after_metadata(item: ChannelPipelineItem, future: Future) -> None:
+            try:
+                item.download = future.result()
+            except Exception as exc:
+                finish_failure(item, exc)
+                return
+            submit_or_skip(caption_pool, item, run_caption, after_caption)
 
         def after_download(item: ChannelPipelineItem, future: Future) -> None:
             try:
@@ -244,7 +263,7 @@ def run_channel_ingest_pipeline(
             except Exception as exc:
                 finish_failure(item, exc)
                 return
-            submit_or_skip(caption_pool, item, run_caption, after_caption)
+            submit_or_skip(local_pool, item, run_local, after_local)
 
         def after_caption(item: ChannelPipelineItem, future: Future) -> None:
             try:
@@ -255,7 +274,7 @@ def run_channel_ingest_pipeline(
             if item.caption_transcript and item.caption_transcript.segments:
                 submit_or_skip(ingest_pool, item, run_caption_ingest, after_ingest)
             else:
-                submit_or_skip(local_pool, item, run_local, after_local)
+                submit_or_skip(download_pool, item, run_download, after_download)
 
         def after_ingest(item: ChannelPipelineItem, future: Future) -> None:
             try:
@@ -275,7 +294,7 @@ def run_channel_ingest_pipeline(
 
         for item in items:
             emit(item, "queued", "Waiting", state="queued")
-            submit_or_skip(download_pool, item, run_download, after_download)
+            submit_or_skip(metadata_pool, item, run_metadata, after_metadata)
 
         with done:
             while remaining > 0:

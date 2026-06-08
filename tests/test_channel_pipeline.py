@@ -84,9 +84,9 @@ def test_channel_pipeline_caption_fast_path_queues_local(monkeypatch, tmp_path: 
     config = _config(tmp_path)
     events: list[tuple[str, str]] = []
 
-    def fake_download(url, config, force=False, stage_callback=None):
+    def fake_metadata(url, config, force=False, stage_callback=None):
         video_id = url.rsplit("=", 1)[1]
-        stage_callback("downloading", "fake download")
+        stage_callback("fetching_metadata", "fake metadata")
         return _download(video_id)
 
     def fake_audio(download, config, force=False, stage_callback=None):
@@ -120,7 +120,11 @@ def test_channel_pipeline_caption_fast_path_queues_local(monkeypatch, tmp_path: 
             }
         )
 
-    monkeypatch.setattr("app.channel_pipeline.download_video_stage", fake_download)
+    monkeypatch.setattr("app.channel_pipeline.fetch_metadata_stage", fake_metadata)
+    monkeypatch.setattr(
+        "app.channel_pipeline.download_video_stage",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("caption path should not download media")),
+    )
     monkeypatch.setattr("app.channel_pipeline.extract_audio_stage", fake_audio)
     monkeypatch.setattr("app.channel_pipeline.fetch_caption_stage", fake_caption)
     monkeypatch.setattr("app.channel_pipeline.ingest_caption_stage", fake_ingest)
@@ -142,8 +146,16 @@ def test_channel_pipeline_caption_fast_path_queues_local(monkeypatch, tmp_path: 
 def test_channel_pipeline_no_caption_uses_local_lane(monkeypatch, tmp_path: Path) -> None:
     config = _config(tmp_path)
     local_calls: list[str] = []
+    download_calls: list[str] = []
 
-    monkeypatch.setattr("app.channel_pipeline.download_video_stage", lambda url, *args, **kwargs: _download(url.rsplit("=", 1)[1]))
+    monkeypatch.setattr("app.channel_pipeline.fetch_metadata_stage", lambda url, *args, **kwargs: _download(url.rsplit("=", 1)[1]))
+
+    def fake_download(url, *args, **kwargs):
+        video_id = url.rsplit("=", 1)[1]
+        download_calls.append(video_id)
+        return _download(video_id)
+
+    monkeypatch.setattr("app.channel_pipeline.download_video_stage", fake_download)
     monkeypatch.setattr("app.channel_pipeline.extract_audio_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr("app.channel_pipeline.fetch_caption_stage", lambda *args, **kwargs: None)
 
@@ -166,5 +178,6 @@ def test_channel_pipeline_no_caption_uses_local_lane(monkeypatch, tmp_path: Path
     result = run_channel_ingest_pipeline([_video("one")], config)
 
     assert result.succeeded == 1
+    assert download_calls == ["one"]
     assert local_calls == ["one"]
     assert result.items[0]["transcript_status"] == "local_ready"
