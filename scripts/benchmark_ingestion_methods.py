@@ -230,6 +230,7 @@ def _write_report(
     force: bool,
     max_resolution: int | None,
     isolated_method_dirs: bool,
+    run_order: str,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     speedup = old.elapsed_seconds / pipelined.elapsed_seconds if pipelined.elapsed_seconds else None
@@ -240,6 +241,7 @@ def _write_report(
         "force": force,
         "max_youtube_resolution": max_resolution,
         "isolated_method_dirs": isolated_method_dirs,
+        "run_order": run_order,
         "background_local_transcription": False,
         "local_whisper": "skipped for timing benchmark",
         "discovery_seconds": discovery_seconds,
@@ -258,6 +260,7 @@ def _write_report(
         f"- Force redownload/rebuild: `{force}`",
         f"- Max YouTube resolution: `{max_resolution or 'configured default'}`",
         f"- Isolated method file/cache dirs: `{isolated_method_dirs}`",
+        f"- Run order: `{run_order}`",
         "- Local Whisper: skipped for timing so the test compares searchable caption ingestion.",
         f"- Discovery: `{discovery_seconds:.2f}s`",
         "",
@@ -320,6 +323,12 @@ def main() -> None:
         help="Use separate download/audio/transcript/chunk/embedding dirs for old and pipelined runs.",
     )
     parser.add_argument(
+        "--order",
+        choices=["old-first", "pipeline-first"],
+        default="old-first",
+        help="Run order for the two methods.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("benchmark-results/ingestion-methods-latest"),
@@ -355,8 +364,12 @@ def main() -> None:
         else config
     )
 
-    old = _run_sequential_caption_fast_path(videos, old_config, force=args.force)
-    pipelined = _run_pipelined_caption_fast_path(videos, pipeline_config, force=args.force)
+    if args.order == "pipeline-first":
+        pipelined = _run_pipelined_caption_fast_path(videos, pipeline_config, force=args.force)
+        old = _run_sequential_caption_fast_path(videos, old_config, force=args.force)
+    else:
+        old = _run_sequential_caption_fast_path(videos, old_config, force=args.force)
+        pipelined = _run_pipelined_caption_fast_path(videos, pipeline_config, force=args.force)
     _write_report(
         args.output_dir,
         args.channel_url,
@@ -368,6 +381,7 @@ def main() -> None:
         args.force,
         args.max_resolution,
         args.isolate_method_dirs,
+        args.order,
     )
 
     speedup = old.elapsed_seconds / pipelined.elapsed_seconds if pipelined.elapsed_seconds else 0
