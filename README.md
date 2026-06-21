@@ -52,16 +52,21 @@ For benchmarking and accuracy testing, see [docs/BENCHMARKING.md](docs/BENCHMARK
 
 ```mermaid
 flowchart LR
-  A["Approved YouTube URL or channel"] --> B["yt-dlp downloader"]
+  A["Approved YouTube URL or channel"] --> M["Metadata + YouTube captions"]
+  M -->|captions-first fast path| E["Transcript chunking"]
+  M -.->|download when needed| B["yt-dlp downloader"]
   B --> C["FFmpeg audio extraction"]
-  C --> D["Local transcription"]
-  D --> E["Transcript chunking"]
+  C --> D["Local transcription<br/>whisper.cpp / faster-whisper"]
+  D --> U["Merge transcripts<br/>background worker"]
+  U --> E
   E --> F["Ollama embeddings"]
   F --> G["Neo4j graph + vector index"]
+
   H["User question"] --> I["Question embedding"]
   I --> G
-  G --> J["Retrieved transcript chunks"]
-  J --> K["Ollama answer generation"]
+  G --> J["Vector candidates"]
+  J --> R["Local reranking"]
+  R --> K["Ollama answer generation"]
   K --> L["Answer with timestamp citations"]
 ```
 

@@ -2,6 +2,80 @@
 
 Resonance Graph is built as a modular local pipeline. The MVP focuses on transcript-first GraphRAG and keeps each stage replaceable.
 
+## System Overview
+
+Two thin entrypoints (`cli.py`, `web.py`) delegate to the orchestrators (`pipeline.py` single-video, `channel_pipeline.py` multi-video). `config.py` (`AppConfig`) is threaded through every module; `models.py` pydantic models are the contract between stages. Everything runs locally — Ollama for embeddings/chat, Neo4j for storage. No external LLM API.
+
+```mermaid
+flowchart TD
+  subgraph entry [Entrypoints]
+    CLI[cli.py - Typer]
+    WEB[web.py + app/static<br/>stdlib http.server]
+  end
+
+  subgraph orch [Orchestrators]
+    PIPE[pipeline.py<br/>single video]
+    CHAN[channel_pipeline.py<br/>staged lanes]
+  end
+
+  subgraph ingest [Ingestion stages]
+    YT[youtube.py<br/>yt-dlp metadata + download]
+    CAP[captions.py<br/>VTT to segments]
+    AUD[audio.py<br/>FFmpeg 16kHz WAV]
+    TR[transcription.py<br/>whisper.cpp / faster-whisper]
+    CH[chunking.py<br/>segments to chunks]
+    RO[roles.py<br/>role candidates]
+  end
+
+  subgraph jobs [Background upgrade]
+    BG[background_jobs.py]
+    WK[worker.py<br/>detached local Whisper + merge]
+  end
+
+  subgraph local [Local services]
+    OL[ollama.py<br/>embed + chat]
+    N4[neo4j_store.py<br/>nodes + vector index]
+  end
+
+  subgraph ask [Retrieval / RAG]
+    RET[retrieval.py]
+    RR[reranking.py]
+    PR[prompts.py]
+  end
+
+  CFG[config.py AppConfig]:::cfg
+  MOD[models.py contract]:::cfg
+
+  CLI --> PIPE & CHAN & RET
+  WEB --> PIPE & CHAN & RET
+  WEB --> BG
+
+  PIPE --> YT --> CAP
+  CHAN --> YT
+  CAP -->|captions-first fast path| CH
+  YT -->|download when needed| AUD --> TR --> CH
+  CH --> RO
+  CH -->|embed| OL --> N4
+  RO --> N4
+
+  PIPE -.spawns.-> BG --> WK
+  WK -->|merge + re-embed + upsert| N4
+
+  RET --> OL
+  RET --> N4
+  N4 --> RR --> PR --> OL
+  OL -->|grounded answer| RET
+
+  CFG -.-> orch & ingest & ask & local & jobs
+  MOD -.-> ingest & ask
+
+  classDef cfg fill:#f5f5f5,stroke:#999,stroke-dasharray:3 3;
+```
+
+Captions-first is the core design: `ingest_url_pipeline` fetches metadata + YouTube captions *before* downloading media, so a video becomes searchable fast, then a higher-quality local Whisper transcript is produced and **merged** in the background (`merge_transcripts` prefers local text, fills gaps with captions). `transcript_source`/`transcript_status` track the pass each chunk came from (`youtube_caption` → `merged`/`local_whisper`).
+
+Two separate job systems, not to be conflated: `background_jobs.py` writes JSON to `data/jobs/` and spawns a detached `python -m app.worker` subprocess that outlives the request; `web.py`'s `JobStore` is a separate in-memory thread tracker for foreground web ingest progress. `/api/background-jobs/*` reads the file system; `/api/jobs/*` reads the in-memory one.
+
 ## Pipeline
 
 1. `youtube.py`
