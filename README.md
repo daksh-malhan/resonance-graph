@@ -51,7 +51,7 @@ For a deeper implementation map, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md
 For benchmarking and accuracy testing, see [docs/BENCHMARKING.md](docs/BENCHMARKING.md).
 
 ```mermaid
-flowchart LR
+flowchart TD
   A["Approved YouTube URL or channel"] --> M["Metadata + YouTube captions"]
   M -->|captions-first fast path| E["Transcript chunking"]
   M -.->|download when needed| B["yt-dlp downloader"]
