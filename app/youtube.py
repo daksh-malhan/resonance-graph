@@ -66,7 +66,9 @@ def _find_local_video_path(info: dict[str, Any], episode_dir: Path) -> Path | No
     return candidates[0] if candidates else None
 
 
-def _extract_video_id_without_download(url: str, config: AppConfig) -> str:
+def _extract_video_id_without_download(url: str) -> str:
+    # ponytail: extra extract_info just to learn the id before outtmpl; reuse cached
+    # info.json from fetch_youtube_metadata if the id ever needs to come cheaper.
     try:
         import yt_dlp
     except ImportError as exc:
@@ -97,7 +99,7 @@ def download_youtube_video(url: str, config: AppConfig, force: bool = False) -> 
         raise AppError("yt-dlp is not installed. Install project dependencies first.") from exc
 
     config.ensure_directories()
-    video_id = _extract_video_id_without_download(url, config)
+    video_id = _extract_video_id_without_download(url)
     episode_dir = config.youtube_download_dir / video_id
     episode_dir.mkdir(parents=True, exist_ok=True)
     info_json_path = episode_dir / f"{video_id}.info.json"

@@ -1,0 +1,287 @@
+{
+  "/Users/dakshmalhan/Documents/resonance-graph/.claude/settings.local.json": {
+    "mtime": 1782067673.1954734,
+    "ast_hash": "1e6098c127897bb64fe8cc9c034ffad8",
+    "semantic_hash": "1e6098c127897bb64fe8cc9c034ffad8"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/__init__.py": {
+    "mtime": 1782067689.2257683,
+    "ast_hash": "3caffd23336b70d933e8cd18d4e68b21",
+    "semantic_hash": "3caffd23336b70d933e8cd18d4e68b21"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/__main__.py": {
+    "mtime": 1782067689.2258666,
+    "ast_hash": "c7cd8c8e1d3dbfc0040612ccaa28b0bc",
+    "semantic_hash": "c7cd8c8e1d3dbfc0040612ccaa28b0bc"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/audio.py": {
+    "mtime": 1782067689.225968,
+    "ast_hash": "c37e7ea2e27dd6b859d7b6c793fe5f1f",
+    "semantic_hash": "c37e7ea2e27dd6b859d7b6c793fe5f1f"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/background_jobs.py": {
+    "mtime": 1782067689.226078,
+    "ast_hash": "eeae78737a2f3a3a06b04c45fafd7446",
+    "semantic_hash": "eeae78737a2f3a3a06b04c45fafd7446"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/benchmark.py": {
+    "mtime": 1782068423.0525372,
+    "ast_hash": "7cc834eb0bfa686c2bf4ba3034c8fdbf",
+    "semantic_hash": "7cc834eb0bfa686c2bf4ba3034c8fdbf"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/captions.py": {
+    "mtime": 1782068388.8917391,
+    "ast_hash": "ac8528f8e3dbdb0773c7b69c21029a27",
+    "semantic_hash": "ac8528f8e3dbdb0773c7b69c21029a27"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/channel_pipeline.py": {
+    "mtime": 1782067689.2266757,
+    "ast_hash": "d3e18e14b88b1a858dedc4c1df7eda4d",
+    "semantic_hash": "d3e18e14b88b1a858dedc4c1df7eda4d"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/chunking.py": {
+    "mtime": 1782067689.226789,
+    "ast_hash": "9df442c2aeac074dbdb7a138573098a7",
+    "semantic_hash": "9df442c2aeac074dbdb7a138573098a7"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/cli.py": {
+    "mtime": 1782067689.226945,
+    "ast_hash": "749483c88d40fac9c2bd1cf123ee6f35",
+    "semantic_hash": "749483c88d40fac9c2bd1cf123ee6f35"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/config.py": {
+    "mtime": 1782068451.5226302,
+    "ast_hash": "286ecf2bc639f77d12668f0d024ac485",
+    "semantic_hash": "286ecf2bc639f77d12668f0d024ac485"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/errors.py": {
+    "mtime": 1782067689.2272165,
+    "ast_hash": "3833f3846f654a22e78ab5fc14125ef1",
+    "semantic_hash": "3833f3846f654a22e78ab5fc14125ef1"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/models.py": {
+    "mtime": 1782067689.227467,
+    "ast_hash": "4a880a84dfb8fb709effbc7c6437528e",
+    "semantic_hash": "4a880a84dfb8fb709effbc7c6437528e"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/neo4j_store.py": {
+    "mtime": 1782067689.2276323,
+    "ast_hash": "02e3532cc4f29eace36d97d9ce940dd6",
+    "semantic_hash": "02e3532cc4f29eace36d97d9ce940dd6"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/ollama.py": {
+    "mtime": 1782067689.2278085,
+    "ast_hash": "e45d668cb56278d87002ab0b5f6f1c86",
+    "semantic_hash": "e45d668cb56278d87002ab0b5f6f1c86"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/pipeline.py": {
+    "mtime": 1782068460.623061,
+    "ast_hash": "8abd622f81c408e9338b8682192ac6da",
+    "semantic_hash": "8abd622f81c408e9338b8682192ac6da"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/prompts.py": {
+    "mtime": 1782067689.228302,
+    "ast_hash": "bb179b06c0cf39941c6a112acc8f04f0",
+    "semantic_hash": "bb179b06c0cf39941c6a112acc8f04f0"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/reranking.py": {
+    "mtime": 1782067689.2284412,
+    "ast_hash": "4b04e5ded321827f58b750e8c3de7c80",
+    "semantic_hash": "4b04e5ded321827f58b750e8c3de7c80"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/retrieval.py": {
+    "mtime": 1782067689.2286785,
+    "ast_hash": "eff96962d28785e59b1ceb2578a883e7",
+    "semantic_hash": "eff96962d28785e59b1ceb2578a883e7"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/roles.py": {
+    "mtime": 1782067689.2288451,
+    "ast_hash": "e6941d969ca89c855d5246dbfeea1097",
+    "semantic_hash": "e6941d969ca89c855d5246dbfeea1097"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/static/app.js": {
+    "mtime": 1782067689.229106,
+    "ast_hash": "cb0cbea1e6b0196efeea0658956de750",
+    "semantic_hash": "cb0cbea1e6b0196efeea0658956de750"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/transcription.py": {
+    "mtime": 1782068374.070838,
+    "ast_hash": "3f79b56d83de5a6bbcfcc77555351a3c",
+    "semantic_hash": "3f79b56d83de5a6bbcfcc77555351a3c"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/utils.py": {
+    "mtime": 1782068307.6220021,
+    "ast_hash": "f13799d0e387abacd527451356d0b191",
+    "semantic_hash": "f13799d0e387abacd527451356d0b191"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/web.py": {
+    "mtime": 1782067689.2300818,
+    "ast_hash": "e3dac60eea5e0fdce3a969ec3e41f85f",
+    "semantic_hash": "e3dac60eea5e0fdce3a969ec3e41f85f"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/worker.py": {
+    "mtime": 1782067689.230361,
+    "ast_hash": "846af5ae0232dc801827beb769cc2819",
+    "semantic_hash": "846af5ae0232dc801827beb769cc2819"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/youtube.py": {
+    "mtime": 1782068442.4393308,
+    "ast_hash": "f5327c308fb7025109faf18101089936",
+    "semantic_hash": "f5327c308fb7025109faf18101089936"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/pyproject.toml": {
+    "mtime": 1782067689.2314544,
+    "ast_hash": "a6079dbc4a6f8bf0db2bc4964f1f1ac5",
+    "semantic_hash": "a6079dbc4a6f8bf0db2bc4964f1f1ac5"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/scripts/benchmark_ingestion_methods.py": {
+    "mtime": 1782067689.2317145,
+    "ast_hash": "ae2f3fa639260c440761c538615e1a53",
+    "semantic_hash": "ae2f3fa639260c440761c538615e1a53"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/fixtures/youtube_info.json": {
+    "mtime": 1782067689.231961,
+    "ast_hash": "bf0ccb1a37c80f6e94af71b2675c9b57",
+    "semantic_hash": "bf0ccb1a37c80f6e94af71b2675c9b57"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_benchmark.py": {
+    "mtime": 1782067689.2321723,
+    "ast_hash": "d96c22f14547d5fb0e7b41e75eb10971",
+    "semantic_hash": "d96c22f14547d5fb0e7b41e75eb10971"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_captions.py": {
+    "mtime": 1782067689.2323759,
+    "ast_hash": "56c5224a40d24718c6703bb628dfd14c",
+    "semantic_hash": "56c5224a40d24718c6703bb628dfd14c"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_channel.py": {
+    "mtime": 1782067689.2324944,
+    "ast_hash": "71aae0e2f186a5200b32729fec026d67",
+    "semantic_hash": "71aae0e2f186a5200b32729fec026d67"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_channel_pipeline.py": {
+    "mtime": 1782067689.2326446,
+    "ast_hash": "f693f80bf761fed41ea0ab902e3e4493",
+    "semantic_hash": "f693f80bf761fed41ea0ab902e3e4493"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_chunking.py": {
+    "mtime": 1782067689.2328472,
+    "ast_hash": "8d180b36f9fbb66984fb5fbbd798102c",
+    "semantic_hash": "8d180b36f9fbb66984fb5fbbd798102c"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_config.py": {
+    "mtime": 1782067689.2329586,
+    "ast_hash": "30e3c3e0657f940b2fc6fa80c54a7f17",
+    "semantic_hash": "30e3c3e0657f940b2fc6fa80c54a7f17"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_models.py": {
+    "mtime": 1782067689.2331777,
+    "ast_hash": "55dbda710c1e56afa47fdbf621b99f13",
+    "semantic_hash": "55dbda710c1e56afa47fdbf621b99f13"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_pipeline_fast_path.py": {
+    "mtime": 1782067689.233327,
+    "ast_hash": "770b81bbcd9328a02744e199c3b062fd",
+    "semantic_hash": "770b81bbcd9328a02744e199c3b062fd"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_prompts.py": {
+    "mtime": 1782067689.2334645,
+    "ast_hash": "5a2d7d3aabf43d8bfbe0fd8b7a43f6e0",
+    "semantic_hash": "5a2d7d3aabf43d8bfbe0fd8b7a43f6e0"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_retrieval.py": {
+    "mtime": 1782067689.2336113,
+    "ast_hash": "dc0c5c14bf545b2174a6f587c4387148",
+    "semantic_hash": "dc0c5c14bf545b2174a6f587c4387148"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_roles.py": {
+    "mtime": 1782067689.2337248,
+    "ast_hash": "2a85183967ae64ca1a86a5df70eb4b7f",
+    "semantic_hash": "2a85183967ae64ca1a86a5df70eb4b7f"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_transcription_merge.py": {
+    "mtime": 1782067689.233867,
+    "ast_hash": "be22503287a4660e777453b3144b1948",
+    "semantic_hash": "be22503287a4660e777453b3144b1948"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_web_progress.py": {
+    "mtime": 1782067689.2339752,
+    "ast_hash": "6463857a80766675aeb4f94484293db3",
+    "semantic_hash": "6463857a80766675aeb4f94484293db3"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/tests/test_youtube.py": {
+    "mtime": 1782067689.2340825,
+    "ast_hash": "fe179c5a8d7b4d5c9dd5b4c6f208ebd8",
+    "semantic_hash": "fe179c5a8d7b4d5c9dd5b4c6f208ebd8"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/.github/ISSUE_TEMPLATE/bug_report.md": {
+    "mtime": 1782067689.224371,
+    "ast_hash": "9c036100a61078ea0c3507fb189415d9",
+    "semantic_hash": "9c036100a61078ea0c3507fb189415d9"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/.github/ISSUE_TEMPLATE/config.yml": {
+    "mtime": 1782067689.2244747,
+    "ast_hash": "a58b47c3d59071bcc435c6c9c86bb4d8",
+    "semantic_hash": "a58b47c3d59071bcc435c6c9c86bb4d8"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/.github/ISSUE_TEMPLATE/feature_request.md": {
+    "mtime": 1782067689.224582,
+    "ast_hash": "e5cac1b77deffb17896050421aa2a289",
+    "semantic_hash": "e5cac1b77deffb17896050421aa2a289"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/.github/pull_request_template.md": {
+    "mtime": 1782067689.2246919,
+    "ast_hash": "89d370cf8c4d3d444a81fe39fd350b23",
+    "semantic_hash": "89d370cf8c4d3d444a81fe39fd350b23"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/.github/workflows/tests.yml": {
+    "mtime": 1782067689.224866,
+    "ast_hash": "86d77377cc05aaf996e50a388763b1eb",
+    "semantic_hash": "86d77377cc05aaf996e50a388763b1eb"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/CODE_OF_CONDUCT.md": {
+    "mtime": 1782067689.2250957,
+    "ast_hash": "fbfedba92219606ee88b5dc3e9cbe34b",
+    "semantic_hash": "fbfedba92219606ee88b5dc3e9cbe34b"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/CONTRIBUTING.md": {
+    "mtime": 1782067689.225205,
+    "ast_hash": "4a199d37f530e5d7134c90dfd91b4937",
+    "semantic_hash": "4a199d37f530e5d7134c90dfd91b4937"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/README.md": {
+    "mtime": 1782067689.2254512,
+    "ast_hash": "145936b8b0222788018747bcfba40dcf",
+    "semantic_hash": "145936b8b0222788018747bcfba40dcf"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/SECURITY.md": {
+    "mtime": 1782067689.225597,
+    "ast_hash": "88f0972af0631d34d8180ae25e7b1da1",
+    "semantic_hash": "88f0972af0631d34d8180ae25e7b1da1"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/app/static/index.html": {
+    "mtime": 1782067689.229297,
+    "ast_hash": "635d049ea91026ef3b1c184e211d2c4c",
+    "semantic_hash": "635d049ea91026ef3b1c184e211d2c4c"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/docker-compose.yml": {
+    "mtime": 1782067689.2307975,
+    "ast_hash": "039bb4720fde5484c92d3b35e07b97ad",
+    "semantic_hash": "039bb4720fde5484c92d3b35e07b97ad"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/docs/ARCHITECTURE.md": {
+    "mtime": 1782067689.2310188,
+    "ast_hash": "b870650a6f08efa3880b82a51d31e613",
+    "semantic_hash": "b870650a6f08efa3880b82a51d31e613"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/docs/BENCHMARKING.md": {
+    "mtime": 1782067689.2311754,
+    "ast_hash": "859bcaa2f68649e27e2dd70de85f0284",
+    "semantic_hash": "859bcaa2f68649e27e2dd70de85f0284"
+  },
+  "/Users/dakshmalhan/Documents/resonance-graph/evals/example.yaml": {
+    "mtime": 1782067689.23135,
+    "ast_hash": "123406473466847c1aa1a132d5ba6cf6",
+    "semantic_hash": "123406473466847c1aa1a132d5ba6cf6"
+  }
+}

@@ -10,6 +10,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from app.errors import AppError
+from app.models import TranscriptSegment
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -74,3 +75,19 @@ def format_timestamp(seconds: float) -> str:
     if hours:
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
     return f"{minutes:02d}:{secs:02d}"
+
+
+def ranges_overlap(start_a: float, end_a: float, start_b: float, end_b: float) -> bool:
+    return max(start_a, start_b) <= min(end_a, end_b)
+
+
+def dedupe_adjacent_segments(segments: list[TranscriptSegment]) -> list[TranscriptSegment]:
+    output: list[TranscriptSegment] = []
+    last_key: tuple[float, float, str] | None = None
+    for segment in segments:
+        key = (round(segment.start_time, 2), round(segment.end_time, 2), segment.text)
+        if key == last_key:
+            continue
+        output.append(segment)
+        last_key = key
+    return output

@@ -67,7 +67,6 @@ class AppConfig(BaseSettings):
     pipeline_local_workers: int = 1
 
     transcription_backend: str = "faster-whisper"
-    transcript_fast_path: str = "youtube_captions"
     background_local_transcription: bool = True
     local_transcription_backend: str = "whisper_cpp_metal"
     whisper_model_size: str = "base"

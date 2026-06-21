@@ -11,7 +11,7 @@ import requests
 from app.config import AppConfig
 from app.errors import AppError
 from app.models import DownloadResult, Transcript, TranscriptSegment
-from app.utils import read_json, read_model, write_json
+from app.utils import dedupe_adjacent_segments, read_json, read_model, write_json
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ def parse_vtt_transcript(vtt_text: str, video_id: str) -> Transcript:
         index += 1
 
     flush()
-    return Transcript(video_id=video_id, segments=_dedupe_caption_segments(segments), source=CAPTION_SOURCE)
+    return Transcript(video_id=video_id, segments=dedupe_adjacent_segments(segments), source=CAPTION_SOURCE)
 
 
 def _select_from_group(group: dict[str, list[dict[str, Any]]], kind: str) -> dict[str, str] | None:
@@ -173,15 +173,3 @@ def _clean_caption_text(text: str) -> str:
     text = html.unescape(text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
-
-
-def _dedupe_caption_segments(segments: list[TranscriptSegment]) -> list[TranscriptSegment]:
-    deduped: list[TranscriptSegment] = []
-    previous_key: tuple[float, float, str] | None = None
-    for segment in segments:
-        key = (round(segment.start_time, 2), round(segment.end_time, 2), segment.text)
-        if key == previous_key:
-            continue
-        deduped.append(segment)
-        previous_key = key
-    return deduped

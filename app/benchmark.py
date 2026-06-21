@@ -16,6 +16,7 @@ from app.models import RetrievedChunk
 from app.neo4j_store import Neo4jStore
 from app.ollama import OllamaClient
 from app.retrieval import answer_question, retrieve_context
+from app.utils import format_timestamp, ranges_overlap
 
 
 TIMESTAMP_RE = re.compile(r"\b(?:(?:\d{1,2}:)?\d{1,2}:\d{2})\b")
@@ -191,7 +192,7 @@ def score_case(
         top_score=contexts[0].score if contexts else None,
         retrieved_chunk_ids=[chunk.chunk_id for chunk in contexts],
         retrieved_timestamps=[
-            f"{chunk.video_id}:{_format_seconds(chunk.start_time)}-{_format_seconds(chunk.end_time)}"
+            f"{chunk.video_id}:{format_timestamp(chunk.start_time)}-{format_timestamp(chunk.end_time)}"
             for chunk in contexts
         ],
         answer=answer if include_answer_text else None,
@@ -265,7 +266,7 @@ def is_relevant(case: BenchmarkCase, chunk: RetrievedChunk) -> bool:
     for relevant_range in case.relevant_time_ranges:
         if relevant_range.video_id and chunk.video_id != relevant_range.video_id:
             continue
-        if _ranges_overlap(
+        if ranges_overlap(
             chunk.start_time,
             chunk.end_time,
             relevant_range.start_time,
@@ -348,19 +349,6 @@ def format_markdown_report(report: BenchmarkReport) -> str:
         )
     lines.append("")
     return "\n".join(lines)
-
-
-def _ranges_overlap(start_a: float, end_a: float, start_b: float, end_b: float) -> bool:
-    return max(start_a, start_b) <= min(end_a, end_b)
-
-
-def _format_seconds(value: float) -> str:
-    total = int(value)
-    hours, remainder = divmod(total, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    if hours:
-        return f"{hours}:{minutes:02d}:{seconds:02d}"
-    return f"{minutes}:{seconds:02d}"
 
 
 def _looks_like_insufficient_evidence(answer: str) -> bool:

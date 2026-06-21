@@ -107,8 +107,6 @@ def fetch_caption_stage(
     force: bool = False,
     stage_callback: StageCallback | None = None,
 ) -> Transcript | None:
-    if config.transcript_fast_path.lower().strip() != "youtube_captions":
-        return None
     _stage(stage_callback, "fetching_captions", "Checking for YouTube captions")
     return extract_youtube_caption_transcript(download, config, force=force)
 
