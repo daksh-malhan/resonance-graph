@@ -1,5 +1,11 @@
 # Resonance Graph
 
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230)
+![Local-first](https://img.shields.io/badge/LLM-local%20only%20(Ollama)-orange)
+![Storage: Neo4j](https://img.shields.io/badge/graph-Neo4j-008cc1)
+
 Local-first GraphRAG for approved podcasts and videos.
 
 Resonance Graph downloads legally approved YouTube videos, extracts and transcribes the audio locally, chunks timestamped transcript segments, generates local embeddings with Ollama, stores the transcript graph and vectors in Neo4j, and answers questions with timestamp citations.
